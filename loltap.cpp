@@ -23,7 +23,7 @@ typedef struct game_state {
   uint32_t lastFPSstamp;
   struct {
     SDL_Texture *tex;
-    SDL_Rect *rect;
+    SDL_Rect rect;
   } clouds;
 } game_state;
 
@@ -114,6 +114,10 @@ bool32 load_bitmaps(game_state *gs) {
     return false;
   }
   printf("loaded clouds!\n");
+  gs->clouds.rect.x = 0;
+  gs->clouds.rect.y = 0;
+  gs->clouds.rect.w = 32;
+  gs->clouds.rect.h = 32;
   return true;
 }
 
@@ -171,8 +175,26 @@ void main_loop(game_state *gs) {
   handle_events(gs);
   SDL_SetRenderDrawColor(gs->sdlRenderer, 0, 0, 0, 255);
   SDL_RenderClear(gs->sdlRenderer);
+
   SDL_RenderCopy(gs->sdlRenderer, gs->bg, 0, 0);
-  SDL_RenderCopy(gs->sdlRenderer, gs->clouds.tex, 0, 0);
+  // pretend more clouds
+  SDL_Rect r;
+  r.x = ((gs->ticks / 4) % 256) - 128;
+  r.y = -4;
+  r.w = 128;
+  r.h = 64;
+  SDL_SetTextureAlphaMod(gs->clouds.tex, 192);
+  SDL_RenderCopyEx(gs->sdlRenderer, gs->clouds.tex, 0, &r, 0, 0,
+                   SDL_FLIP_HORIZONTAL);
+
+  if (gs->ticks % 100 == 0) {
+    gs->clouds.rect.x++;
+  }
+  if (gs->clouds.rect.x > 32) {
+    gs->clouds.rect.x = -32;
+  }
+  SDL_SetTextureAlphaMod(gs->clouds.tex, 255);
+  SDL_RenderCopy(gs->sdlRenderer, gs->clouds.tex, 0, &gs->clouds.rect);
 
   SDL_RenderPresent(gs->sdlRenderer);
   gs->frames++;
