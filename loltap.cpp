@@ -9,11 +9,18 @@
 
 #define bool32 int32_t
 
+typedef struct chicken_info {
+  SDL_Texture *tex;
+  SDL_Rect rect;
+  int frame;
+  int x, y;
+} chicken;
+
 typedef struct game_state {
   uint32_t ticks;
   SDL_Renderer *sdlRenderer;
   SDL_Window *sdlWindow;
-  SDL_Texture *bg;
+  SDL_Texture *bg, *tower, *road;
   bool32 running;
   struct {
     int x, y;
@@ -25,6 +32,7 @@ typedef struct game_state {
     SDL_Texture *tex;
     SDL_Rect rect;
   } clouds;
+  chicken_info chicken;
 } game_state;
 
 void emscripten_loop_workaround(void *gs);
@@ -103,11 +111,24 @@ bool32 load_texture_from_bitmap(SDL_Renderer *renderer, SDL_Texture **tex,
 }
 
 bool32 load_bitmaps(game_state *gs) {
-  if (!load_texture_from_bitmap(gs->sdlRenderer, &gs->bg, "bg.bmp")) {
+  if (!load_texture_from_bitmap(gs->sdlRenderer, &gs->bg, "bg_bg.png")) {
     SDL_Quit();
     return false;
   }
   printf("loaded bg!\n");
+
+  if (!load_texture_from_bitmap(gs->sdlRenderer, &gs->tower, "bg_tower.png")) {
+    SDL_Quit();
+    return false;
+  }
+  printf("loaded tower!\n");
+
+  if (!load_texture_from_bitmap(gs->sdlRenderer, &gs->road, "bg_road.png")) {
+    SDL_Quit();
+    return false;
+  }
+  printf("loaded road!\n");
+
   if (!load_texture_from_bitmap(gs->sdlRenderer, &gs->clouds.tex,
                                 "clouds.png")) {
     SDL_Quit();
@@ -115,10 +136,47 @@ bool32 load_bitmaps(game_state *gs) {
   }
   printf("loaded clouds!\n");
   gs->clouds.rect.x = 0;
-  gs->clouds.rect.y = 0;
+  gs->clouds.rect.y = 6;
   gs->clouds.rect.w = 32;
   gs->clouds.rect.h = 32;
+
   return true;
+}
+
+bool32 init_chicken(game_state *gs) {
+  if (!load_texture_from_bitmap(gs->sdlRenderer, &gs->chicken.tex,
+                                "chicken_chicken.png")) {
+    SDL_Quit();
+    return false;
+  }
+  printf("loaded chicken!\n");
+  gs->chicken.frame = 0;
+  gs->chicken.rect.x = 0;
+  gs->chicken.rect.y = 0;
+  gs->chicken.rect.w = 16;
+  gs->chicken.rect.h = 16;
+  gs->chicken.x = 12;
+  gs->chicken.y = 12;
+  return true;
+}
+
+void tick_chicken(game_state *gs) {
+  if (gs->ticks % 10 == 0) {
+    gs->chicken.frame = (gs->chicken.frame + 1) % 6;
+  }
+}
+
+void render_chicken(game_state *gs) {
+  SDL_Rect r;
+  r.x = gs->chicken.x;
+  r.y = gs->chicken.y;
+  r.w = 16;
+  r.h = 16;
+
+  gs->chicken.rect.x = 16 * gs->chicken.frame;
+  gs->chicken.rect.y = 0;
+
+  SDL_RenderCopy(gs->sdlRenderer, gs->chicken.tex, &gs->chicken.rect, &r);
 }
 
 extern "C" int main(int argc, char **argv) {
@@ -149,6 +207,10 @@ extern "C" int main(int argc, char **argv) {
     printf("bailing!\n");
     return 1;
   }
+  if (!init_chicken(&gs)) {
+    printf("bailing!\n");
+    return 1;
+  };
 
 #ifdef __EMSCRIPTEN__
   emscripten_set_main_loop_arg(&emscripten_loop_workaround, (void *)&gs, 0, 1);
@@ -173,19 +235,14 @@ void main_loop(game_state *gs) {
   gs->ticks++;
   /// todo handle having to step multiple ticks because fps got behind
   handle_events(gs);
-  SDL_SetRenderDrawColor(gs->sdlRenderer, 0, 0, 0, 255);
+  tick_chicken(gs);
+  // todo sky color here
+  SDL_SetRenderDrawColor(gs->sdlRenderer, 69, 150, 240, 255);
+  //
   SDL_RenderClear(gs->sdlRenderer);
 
   SDL_RenderCopy(gs->sdlRenderer, gs->bg, 0, 0);
-  // pretend more clouds
-  SDL_Rect r;
-  r.x = ((gs->ticks / 4) % 256) - 128;
-  r.y = -4;
-  r.w = 128;
-  r.h = 64;
-  SDL_SetTextureAlphaMod(gs->clouds.tex, 192);
-  SDL_RenderCopyEx(gs->sdlRenderer, gs->clouds.tex, 0, &r, 0, 0,
-                   SDL_FLIP_HORIZONTAL);
+  SDL_RenderCopy(gs->sdlRenderer, gs->road, 0, 0);
 
   if (gs->ticks % 100 == 0) {
     gs->clouds.rect.x++;
@@ -193,8 +250,28 @@ void main_loop(game_state *gs) {
   if (gs->clouds.rect.x > 32) {
     gs->clouds.rect.x = -32;
   }
-  SDL_SetTextureAlphaMod(gs->clouds.tex, 255);
+  SDL_SetTextureAlphaMod(gs->clouds.tex, 128);
   SDL_RenderCopy(gs->sdlRenderer, gs->clouds.tex, 0, &gs->clouds.rect);
+  SDL_Rect r = gs->clouds.rect;
+  r.x += 2;
+  r.y += 2;
+  SDL_RenderCopy(gs->sdlRenderer, gs->clouds.tex, 0, &r);
+
+  SDL_RenderCopy(gs->sdlRenderer, gs->tower, 0, 0);
+
+  render_chicken(gs);
+
+  // pretend more clouds
+  r.x = ((gs->ticks / 8) % 256) - 128;
+  r.y = -2;
+  r.w = 128;
+  r.h = 64;
+  SDL_SetTextureAlphaMod(gs->clouds.tex, 128);
+  SDL_RenderCopyEx(gs->sdlRenderer, gs->clouds.tex, 0, &r, 0, 0,
+                   SDL_FLIP_HORIZONTAL);
+  r.y += 6;
+  r.x -= 24;
+  SDL_RenderCopy(gs->sdlRenderer, gs->clouds.tex, 0, &r);
 
   SDL_RenderPresent(gs->sdlRenderer);
   gs->frames++;
