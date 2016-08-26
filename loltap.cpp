@@ -1,58 +1,72 @@
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb/stb_image.h"
-#include <SDL2/SDL.h>
-#include <stdio.h>
+#include "include/base.h"
 
-#ifdef __EMSCRIPTEN__
-#include <emscripten.h>
-#endif
-
-#define bool32 int32_t
-
-typedef struct chicken_info {
-  SDL_Texture *tex;
-  SDL_Rect rect;
-  int frame;
-  int x, y;
-} chicken;
-
-typedef struct game_state {
-  uint32_t ticks;
-  SDL_Renderer *sdlRenderer;
-  SDL_Window *sdlWindow;
-  SDL_Texture *bg, *tower, *road;
-  bool32 running;
-  struct {
-    int x, y;
-  } mouse;
-  int frames;
-  uint32_t lastMs;
-  uint32_t lastFPSstamp;
-  struct {
-    SDL_Texture *tex;
-    SDL_Rect rect;
-  } clouds;
-  chicken_info chicken;
-} game_state;
-
-void emscripten_loop_workaround(void *gs);
-void main_loop(game_state *gs);
-
-#define SCREEN_H 640
-#define SCREEN_W 640
-#define MS_PER_TICK 1000 / 60
+#include "chicken.cpp"
 
 void handle_events(game_state *gs) {
   SDL_Event e;
   while (SDL_PollEvent(&e)) {
     switch (e.type) {
-
+    case SDL_WINDOWEVENT: {
+      SDL_Event *event = &e;
+      switch (event->window.event) {
+      case SDL_WINDOWEVENT_SHOWN:
+        SDL_Log("Window %d shown", event->window.windowID);
+        break;
+      case SDL_WINDOWEVENT_HIDDEN:
+        SDL_Log("Window %d hidden", event->window.windowID);
+        break;
+      case SDL_WINDOWEVENT_EXPOSED:
+        SDL_Log("Window %d exposed", event->window.windowID);
+        break;
+      case SDL_WINDOWEVENT_MOVED:
+        SDL_Log("Window %d moved to %d,%d", event->window.windowID,
+                event->window.data1, event->window.data2);
+        break;
+      case SDL_WINDOWEVENT_RESIZED:
+        SDL_Log("Window %d resized to %dx%d", event->window.windowID,
+                event->window.data1, event->window.data2);
+        break;
+      case SDL_WINDOWEVENT_SIZE_CHANGED:
+        SDL_Log("Window %d size changed to %dx%d", event->window.windowID,
+                event->window.data1, event->window.data2);
+        break;
+      case SDL_WINDOWEVENT_MINIMIZED:
+        SDL_Log("Window %d minimized", event->window.windowID);
+        break;
+      case SDL_WINDOWEVENT_MAXIMIZED:
+        SDL_Log("Window %d maximized", event->window.windowID);
+        break;
+      case SDL_WINDOWEVENT_RESTORED:
+        SDL_Log("Window %d restored", event->window.windowID);
+        break;
+      case SDL_WINDOWEVENT_ENTER:
+        SDL_Log("Mouse entered window %d", event->window.windowID);
+        gs->mouse.captured = true;
+        break;
+      case SDL_WINDOWEVENT_LEAVE:
+        SDL_Log("Mouse left window %d", event->window.windowID);
+        gs->mouse.captured = true;
+        break;
+      case SDL_WINDOWEVENT_FOCUS_GAINED:
+        SDL_Log("Window %d gained keyboard focus", event->window.windowID);
+        break;
+      case SDL_WINDOWEVENT_FOCUS_LOST:
+        SDL_Log("Window %d lost keyboard focus", event->window.windowID);
+        break;
+      case SDL_WINDOWEVENT_CLOSE:
+        SDL_Log("Window %d closed", event->window.windowID);
+        break;
+      default:
+        SDL_Log("Window %d got unknown event %d", event->window.windowID,
+                event->window.event);
+        break;
+      }
+    }
     case SDL_MOUSEMOTION:
       gs->mouse.x = e.motion.x;
       gs->mouse.y = e.motion.y;
       break;
     case SDL_QUIT:
-      printf("quit requested\n");
       printf("quit requested\n");
       gs->running = false;
 #ifdef __EMSCRIPTEN__
@@ -60,7 +74,36 @@ void handle_events(game_state *gs) {
 #endif
       break;
     case SDL_KEYDOWN:
+      switch (e.key.keysym.sym) {
+      case SDLK_UP:
+        gs->pad.up = true;
+        break;
+      case SDLK_DOWN:
+        gs->pad.down = true;
+        break;
+      case SDLK_LEFT:
+        gs->pad.left = true;
+        break;
+      case SDLK_RIGHT:
+        gs->pad.right = true;
+        break;
+      }
+      break;
     case SDL_KEYUP:
+      switch (e.key.keysym.sym) {
+      case SDLK_UP:
+        gs->pad.up = false;
+        break;
+      case SDLK_DOWN:
+        gs->pad.down = false;
+        break;
+      case SDLK_LEFT:
+        gs->pad.left = false;
+        break;
+      case SDLK_RIGHT:
+        gs->pad.right = false;
+        break;
+      }
       if (e.key.keysym.sym == 'q') {
         printf("quit requested\n");
         gs->running = false;
@@ -69,122 +112,38 @@ void handle_events(game_state *gs) {
 #endif
       }
       printf("key: %c\n", e.key.keysym.sym);
+      printf("key: %s\n", SDL_GetKeyName(e.key.keysym.sym));
       break;
     default:
       printf("event %u\n", e.type);
       break;
     }
   }
+  SDL_ShowCursor(!gs->mouse.captured);
 }
 
 #undef main // to shut up winders
 
-bool32 load_texture_from_bitmap(SDL_Renderer *renderer, SDL_Texture **tex,
-                                const char *name) {
-  // it's just easier to get it converted to a texture this way, even though
-  // there's the extra step;
-  // todo i think we leak memory if sdl_freesurface doesn't call free() on
-  // underlying pixel data..
-  int x, y, n;
-  unsigned char *data = stbi_load(name, &x, &y, &n, 4);
-  if (!data) {
-    printf("failed to load %s!\n", name);
-    return false;
-  }
-  SDL_Surface *temp = SDL_CreateRGBSurfaceFrom(
-      data, x, y, n * 8, 4 * x, 0x000000FF, 0x0000FF00, 0x00FF0000, 0xFF000000);
-  // SDL_Surface *temp = SDL_LoadBMP(name);
-  if (temp == 0) {
-    printf("failed to load %s!\n", name);
-    printf("%s\n", SDL_GetError());
-    return false;
-  }
-  // SDL_SetColorKey(temp, true, 0xFFFF00FF);
-  *tex = SDL_CreateTextureFromSurface(renderer, temp);
-  if (*tex == 0) {
-    printf("failed to convert %s into texture!\n", name);
-    SDL_FreeSurface(temp);
-    return false;
-  }
-  SDL_FreeSurface(temp);
-  return true;
-}
+typedef struct loadable {
+  SDL_Texture **tex;
+  const char *filename;
+} loadable;
 
-bool32 load_bitmaps(game_state *gs) {
-  if (!load_texture_from_bitmap(gs->sdlRenderer, &gs->bg, "bg_bg.png")) {
-    SDL_Quit();
-    return false;
-  }
-  printf("loaded bg!\n");
-
-  if (!load_texture_from_bitmap(gs->sdlRenderer, &gs->tower, "bg_tower.png")) {
-    SDL_Quit();
-    return false;
-  }
-  printf("loaded tower!\n");
-
-  if (!load_texture_from_bitmap(gs->sdlRenderer, &gs->road, "bg_road.png")) {
-    SDL_Quit();
-    return false;
-  }
-  printf("loaded road!\n");
-
-  if (!load_texture_from_bitmap(gs->sdlRenderer, &gs->clouds.tex,
-                                "clouds.png")) {
-    SDL_Quit();
-    return false;
-  }
-  printf("loaded clouds!\n");
-  gs->clouds.rect.x = 0;
-  gs->clouds.rect.y = 6;
-  gs->clouds.rect.w = 32;
-  gs->clouds.rect.h = 32;
-
-  return true;
-}
-
-bool32 init_chicken(game_state *gs) {
-  if (!load_texture_from_bitmap(gs->sdlRenderer, &gs->chicken.tex,
-                                "chicken_chicken.png")) {
-    SDL_Quit();
-    return false;
-  }
-  printf("loaded chicken!\n");
-  gs->chicken.frame = 0;
-  gs->chicken.rect.x = 0;
-  gs->chicken.rect.y = 0;
-  gs->chicken.rect.w = 16;
-  gs->chicken.rect.h = 16;
-  gs->chicken.x = 12;
-  gs->chicken.y = 12;
-  return true;
-}
-
-void tick_chicken(game_state *gs) {
-  if (gs->ticks % 10 == 0) {
-    gs->chicken.frame = (gs->chicken.frame + 1) % 6;
-  }
-}
-
-void render_chicken(game_state *gs) {
-  SDL_Rect r;
-  r.x = gs->chicken.x;
-  r.y = gs->chicken.y;
-  r.w = 16;
-  r.h = 16;
-
-  gs->chicken.rect.x = 16 * gs->chicken.frame;
-  gs->chicken.rect.y = 0;
-
-  SDL_RenderCopy(gs->sdlRenderer, gs->chicken.tex, &gs->chicken.rect, &r);
-}
-
+#define ARRAY_COUNT(thing) sizeof(thing) / sizeof(thing[0])
 extern "C" int main(int argc, char **argv) {
   game_state gs = {0};
   gs.running = 1;
   gs.lastMs = SDL_GetTicks();
   gs.lastFPSstamp = gs.lastMs;
   printf("hi\n");
+  loadable things_to_load[] = {{&gs.bg, "bg_bg.png"},
+                               {&gs.tower, "bg_tower.png"},
+                               {&gs.road, "bg_road.png"},
+                               {&gs.font, "font.png"}};
+  gs.clouds.rect.x = 0;
+  gs.clouds.rect.y = 24;
+  gs.clouds.rect.w = 128;
+  gs.clouds.rect.h = 128;
 
 #ifdef __EMSCRIPTEN__
   // EM_ASM(document.getElementById('canvas').style.width = '512px');
@@ -198,14 +157,18 @@ extern "C" int main(int argc, char **argv) {
   SDL_CreateWindowAndRenderer(SCREEN_W, SCREEN_H, 0, &gs.sdlWindow,
                               &gs.sdlRenderer);
   SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
-  SDL_RenderSetLogicalSize(gs.sdlRenderer, 32, 32);
+  SDL_RenderSetLogicalSize(gs.sdlRenderer, 128, 128);
 #ifdef __EMSCRIPTEN__
   emscripten_cancel_main_loop();
 #endif
-  printf("set 32x32 rendering res\n");
-  if (!load_bitmaps(&gs)) {
-    printf("bailing!\n");
-    return 1;
+  printf("set 128x128 rendering res\n");
+  for (int i = 0; i < ARRAY_COUNT(things_to_load); i++) {
+    if (!load_texture_from_bitmap(gs.sdlRenderer, things_to_load[i].tex,
+                                  things_to_load[i].filename)) {
+      SDL_Quit();
+      return false;
+    }
+    printf("loaded %s!\n", things_to_load[i].filename);
   }
   if (!init_chicken(&gs)) {
     printf("bailing!\n");
@@ -230,7 +193,11 @@ void main_loop(game_state *gs) {
     if (toWait >= MS_PER_TICK) {
       break;
     }
-    SDL_Delay(1); // todo sleep a bit less silly-ly
+    if (toWait <= 1) {
+      continue;
+    }
+    SDL_Delay(
+        1); // todo sleep a bit less silly-ly, handle shorter periods correctly
   }
   gs->ticks++;
   /// todo handle having to step multiple ticks because fps got behind
@@ -247,15 +214,15 @@ void main_loop(game_state *gs) {
   if (gs->ticks % 100 == 0) {
     gs->clouds.rect.x++;
   }
-  if (gs->clouds.rect.x > 32) {
-    gs->clouds.rect.x = -32;
+  if (gs->clouds.rect.x > 128) {
+    gs->clouds.rect.x = -128;
   }
-  SDL_SetTextureAlphaMod(gs->clouds.tex, 128);
+  SDL_SetTextureAlphaMod(gs->clouds.tex, 255);
   SDL_RenderCopy(gs->sdlRenderer, gs->clouds.tex, 0, &gs->clouds.rect);
   SDL_Rect r = gs->clouds.rect;
   r.x += 2;
   r.y += 2;
-  SDL_RenderCopy(gs->sdlRenderer, gs->clouds.tex, 0, &r);
+  // SDL_RenderCopy(gs->sdlRenderer, gs->clouds.tex, 0, &r);
 
   SDL_RenderCopy(gs->sdlRenderer, gs->tower, 0, 0);
 
@@ -265,13 +232,28 @@ void main_loop(game_state *gs) {
   r.x = ((gs->ticks / 8) % 256) - 128;
   r.y = -2;
   r.w = 128;
-  r.h = 64;
+  r.h = 256;
   SDL_SetTextureAlphaMod(gs->clouds.tex, 128);
-  SDL_RenderCopyEx(gs->sdlRenderer, gs->clouds.tex, 0, &r, 0, 0,
-                   SDL_FLIP_HORIZONTAL);
+  // SDL_RenderCopyEx(gs->sdlRenderer, gs->clouds.tex, 0, &r, 0, 0,
+  //                  SDL_FLIP_HORIZONTAL);
+  render_chicken(gs);
   r.y += 6;
   r.x -= 24;
-  SDL_RenderCopy(gs->sdlRenderer, gs->clouds.tex, 0, &r);
+  // SDL_RenderCopy(gs->sdlRenderer, gs->clouds.tex, 0, &r);
+
+  SDL_Rect letter = {(gs->ticks / 100) % 10 * 5, 0, 5, 8};
+  SDL_Rect pos = {16, 16, 10, 16};
+  SDL_RenderCopy(gs->sdlRenderer, gs->font, &letter, &pos);
+  letter.x = (gs->ticks / 100) % 10 * 5;
+  letter.y = 8;
+  pos.x = 30;
+  SDL_RenderCopy(gs->sdlRenderer, gs->font, &letter, &pos);
+  letter.y = 16;
+  pos.x = 44;
+  SDL_RenderCopy(gs->sdlRenderer, gs->font, &letter, &pos);
+  letter.y = 24;
+  pos.x = 58;
+  SDL_RenderCopy(gs->sdlRenderer, gs->font, &letter, &pos);
 
   SDL_RenderPresent(gs->sdlRenderer);
   gs->frames++;
