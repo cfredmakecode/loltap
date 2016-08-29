@@ -1,0 +1,6 @@
+click button -> counter++
+tower -> menu options for upgrade
+  icon indicating upgrade available
+upgrade menu -> monsters to bigger ones etc
+upgrade -> button to auto click, autoclick while touching, etc
+bad things happen to the mooks created by wizard tower on their way off screen, tap to kill golem/townsfolk/etc

@@ -1,10 +1,11 @@
 #ifndef BASE_H
 #define BASE_H
 
+#include <stdio.h>
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb/stb_image.h"
 #include <SDL2/SDL.h>
-#include <stdio.h>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -24,6 +25,7 @@ typedef struct chicken_info {
 } chicken;
 
 typedef struct game_state {
+  char fps_text[16];
   uint32_t ticks;
   SDL_Renderer *sdlRenderer;
   SDL_Window *sdlWindow;
@@ -32,6 +34,7 @@ typedef struct game_state {
   struct {
     int x, y;
     bool32 captured;
+    bool32 button1, button2;
   } mouse;
   int frames;
   uint32_t lastMs;
@@ -44,7 +47,12 @@ typedef struct game_state {
   struct {
     bool32 up, down, left, right, a, b, select, start;
   } pad;
-  SDL_Texture *font;
+  struct {
+    SDL_Texture *font;
+    const char *item;
+    SDL_Rect rect;
+    bool32 open;
+  } menu;
 } game_state;
 
 void emscripten_loop_workaround(void *gs);
@@ -79,6 +87,14 @@ bool32 load_texture_from_bitmap(SDL_Renderer *renderer, SDL_Texture **tex,
   }
   SDL_FreeSurface(temp);
   return true;
+}
+
+bool32 die() {
+#ifdef __EMSCRIPTEN__
+  emscripten_cancel_main_loop();
+#endif
+  SDL_Quit();
+  return false;
 }
 
 #endif

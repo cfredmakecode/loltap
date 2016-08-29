@@ -1,6 +1,7 @@
 #include "include/base.h"
 
 #include "chicken.cpp"
+#include "menu.cpp"
 
 void handle_events(game_state *gs) {
   SDL_Event e;
@@ -45,7 +46,7 @@ void handle_events(game_state *gs) {
         break;
       case SDL_WINDOWEVENT_LEAVE:
         SDL_Log("Mouse left window %d", event->window.windowID);
-        gs->mouse.captured = true;
+        gs->mouse.captured = false;
         break;
       case SDL_WINDOWEVENT_FOCUS_GAINED:
         SDL_Log("Window %d gained keyboard focus", event->window.windowID);
@@ -65,13 +66,19 @@ void handle_events(game_state *gs) {
     case SDL_MOUSEMOTION:
       gs->mouse.x = e.motion.x;
       gs->mouse.y = e.motion.y;
+      gs->mouse.button1 = e.motion.state & SDL_BUTTON_LMASK;
+      gs->mouse.button2 = e.motion.state & SDL_BUTTON_RMASK;
+      break;
+    case SDL_MOUSEBUTTONDOWN:
+    case SDL_MOUSEBUTTONUP:
+      gs->mouse.button1 = e.button.which & SDL_BUTTON_LMASK;
+      gs->mouse.button2 = e.button.which & SDL_BUTTON_RMASK;
+      SDL_Log("Mouse button pressed or something!");
       break;
     case SDL_QUIT:
       printf("quit requested\n");
       gs->running = false;
-#ifdef __EMSCRIPTEN__
-      emscripten_cancel_main_loop();
-#endif
+      die();
       break;
     case SDL_KEYDOWN:
       switch (e.key.keysym.sym) {
@@ -107,9 +114,7 @@ void handle_events(game_state *gs) {
       if (e.key.keysym.sym == 'q') {
         printf("quit requested\n");
         gs->running = false;
-#ifdef __EMSCRIPTEN__
-        emscripten_cancel_main_loop();
-#endif
+        die();
       }
       printf("key: %c\n", e.key.keysym.sym);
       printf("key: %s\n", SDL_GetKeyName(e.key.keysym.sym));
@@ -139,11 +144,16 @@ extern "C" int main(int argc, char **argv) {
   loadable things_to_load[] = {{&gs.bg, "bg_bg.png"},
                                {&gs.tower, "bg_tower.png"},
                                {&gs.road, "bg_road.png"},
-                               {&gs.font, "font.png"}};
+                               {&gs.clouds.tex, "clouds.png"},
+                               {&gs.menu.font, "font.png"}};
   gs.clouds.rect.x = 0;
   gs.clouds.rect.y = 24;
   gs.clouds.rect.w = 128;
   gs.clouds.rect.h = 128;
+
+  if (!init_menu(&gs)) {
+    return die();
+  }
 
 #ifdef __EMSCRIPTEN__
   // EM_ASM(document.getElementById('canvas').style.width = '512px');
@@ -165,8 +175,7 @@ extern "C" int main(int argc, char **argv) {
   for (int i = 0; i < ARRAY_COUNT(things_to_load); i++) {
     if (!load_texture_from_bitmap(gs.sdlRenderer, things_to_load[i].tex,
                                   things_to_load[i].filename)) {
-      SDL_Quit();
-      return false;
+      return die();
     }
     printf("loaded %s!\n", things_to_load[i].filename);
   }
@@ -196,13 +205,14 @@ void main_loop(game_state *gs) {
     if (toWait <= 1) {
       continue;
     }
-    SDL_Delay(
-        1); // todo sleep a bit less silly-ly, handle shorter periods correctly
+    SDL_Delay(1);
+    // todo sleep a bit less silly-ly, handle shorter periods correctly
   }
   gs->ticks++;
   /// todo handle having to step multiple ticks because fps got behind
   handle_events(gs);
   tick_chicken(gs);
+  tick_menu(gs);
   // todo sky color here
   SDL_SetRenderDrawColor(gs->sdlRenderer, 69, 150, 240, 255);
   //
@@ -222,7 +232,7 @@ void main_loop(game_state *gs) {
   SDL_Rect r = gs->clouds.rect;
   r.x += 2;
   r.y += 2;
-  // SDL_RenderCopy(gs->sdlRenderer, gs->clouds.tex, 0, &r);
+  SDL_RenderCopy(gs->sdlRenderer, gs->clouds.tex, 0, &r);
 
   SDL_RenderCopy(gs->sdlRenderer, gs->tower, 0, 0);
 
@@ -234,31 +244,59 @@ void main_loop(game_state *gs) {
   r.w = 128;
   r.h = 256;
   SDL_SetTextureAlphaMod(gs->clouds.tex, 128);
-  // SDL_RenderCopyEx(gs->sdlRenderer, gs->clouds.tex, 0, &r, 0, 0,
-  //                  SDL_FLIP_HORIZONTAL);
+  SDL_RenderCopyEx(gs->sdlRenderer, gs->clouds.tex, 0, &r, 0, 0,
+                   SDL_FLIP_HORIZONTAL);
   render_chicken(gs);
   r.y += 6;
   r.x -= 24;
-  // SDL_RenderCopy(gs->sdlRenderer, gs->clouds.tex, 0, &r);
+  SDL_RenderCopy(gs->sdlRenderer, gs->clouds.tex, 0, &r);
 
-  SDL_Rect letter = {(gs->ticks / 100) % 10 * 5, 0, 5, 8};
-  SDL_Rect pos = {16, 16, 10, 16};
-  SDL_RenderCopy(gs->sdlRenderer, gs->font, &letter, &pos);
-  letter.x = (gs->ticks / 100) % 10 * 5;
-  letter.y = 8;
-  pos.x = 30;
-  SDL_RenderCopy(gs->sdlRenderer, gs->font, &letter, &pos);
-  letter.y = 16;
-  pos.x = 44;
-  SDL_RenderCopy(gs->sdlRenderer, gs->font, &letter, &pos);
-  letter.y = 24;
-  pos.x = 58;
-  SDL_RenderCopy(gs->sdlRenderer, gs->font, &letter, &pos);
+  // SDL_Rect letter = {(gs->ticks / 100) % 10 * 5, 0, 5, 8};
+  // SDL_Rect pos = {16, 16, 10, 16};
+  // SDL_RenderCopy(gs->sdlRenderer, gs->font, &letter, &pos);
+  // letter.x = (gs->ticks / 100) % 10 * 5;
+  // letter.y = (gs->ticks / 100) % 4 * 8;
+  // letter.y = 8;
+  // pos.x = 30;
+  // SDL_RenderCopy(gs->sdlRenderer, gs->font, &letter, &pos);
+  // letter.x = (gs->ticks / 50) % 10 * 5;
+  // letter.y = (gs->ticks / 50) % 4 * 8;
+  // pos.x = 44;
+  // SDL_RenderCopy(gs->sdlRenderer, gs->font, &letter, &pos);
+  // letter.x = (gs->ticks / 160) % 10 * 5;
+  // letter.y = (gs->ticks / 160) % 4 * 8;
+  // pos.x = 58;
+  // SDL_RenderCopy(gs->sdlRenderer, gs->font, &letter, &pos);
+
+  // "UI", if you will
+  render_menu(gs);
+
+  // SDL_SetRenderDrawColor(gs->sdlRenderer, 40, 40, 60, 240);
+  // SDL_Rect button = {0, 96, 128, 32};
+  // SDL_SetRenderDrawBlendMode(gs->sdlRenderer, SDL_BLENDMODE_BLEND);
+  // SDL_RenderFillRect(gs->sdlRenderer, &button);
+  //
+  SDL_Rect mousepos = {gs->mouse.x, gs->mouse.y, 1, 1};
+  SDL_SetRenderDrawColor(gs->sdlRenderer, 20, 20, 40, 240);
+  // if (SDL_HasIntersection(&button, &mousepos)) {
+  //   SDL_SetRenderDrawColor(gs->sdlRenderer, 128, 128, 160, 240);
+  // }
+  // SDL_RenderDrawRect(gs->sdlRenderer, &button);
+
+  // letter.x = 10;
+  // letter.y = 0;
+  // pos.x = 30;
+  // pos.y = 100;
+  // SDL_RenderCopy(gs->sdlRenderer, gs->font, &letter, &pos);
+
+  SDL_RenderFillRect(gs->sdlRenderer, &mousepos);
 
   SDL_RenderPresent(gs->sdlRenderer);
   gs->frames++;
   if (SDL_GetTicks() - gs->lastFPSstamp > 1000) {
     printf("%d fps\n", gs->frames);
+    sprintf(gs->fps_text, "%d fps", gs->frames);
+    gs->menu.item = (const char *)gs->fps_text;
     gs->frames = 0;
     gs->lastFPSstamp = SDL_GetTicks();
   }
