@@ -25,14 +25,15 @@ typedef struct chicken_info {
 } chicken;
 
 typedef struct game_state {
-  char fps_text[16];
+  uint32_t taps;
   uint32_t ticks;
+  uint32_t fps;
   SDL_Renderer *sdlRenderer;
   SDL_Window *sdlWindow;
   SDL_Texture *bg, *tower, *road;
   bool32 running;
   struct {
-    int x, y;
+    SDL_Rect rect;
     bool32 captured;
     bool32 button1, button2;
   } mouse;
@@ -49,9 +50,11 @@ typedef struct game_state {
   } pad;
   struct {
     SDL_Texture *font;
-    const char *item;
     SDL_Rect rect;
     bool32 open;
+    struct {
+      SDL_Rect rect;
+    } tapbutton;
   } menu;
 } game_state;
 

@@ -43,10 +43,12 @@ void handle_events(game_state *gs) {
       case SDL_WINDOWEVENT_ENTER:
         SDL_Log("Mouse entered window %d", event->window.windowID);
         gs->mouse.captured = true;
+        SDL_ShowCursor(!gs->mouse.captured);
         break;
       case SDL_WINDOWEVENT_LEAVE:
         SDL_Log("Mouse left window %d", event->window.windowID);
         gs->mouse.captured = false;
+        SDL_ShowCursor(!gs->mouse.captured);
         break;
       case SDL_WINDOWEVENT_FOCUS_GAINED:
         SDL_Log("Window %d gained keyboard focus", event->window.windowID);
@@ -64,16 +66,27 @@ void handle_events(game_state *gs) {
       }
     }
     case SDL_MOUSEMOTION:
-      gs->mouse.x = e.motion.x;
-      gs->mouse.y = e.motion.y;
-      gs->mouse.button1 = e.motion.state & SDL_BUTTON_LMASK;
-      gs->mouse.button2 = e.motion.state & SDL_BUTTON_RMASK;
+      gs->mouse.rect.x = e.motion.x;
+      gs->mouse.rect.y = e.motion.y;
       break;
     case SDL_MOUSEBUTTONDOWN:
     case SDL_MOUSEBUTTONUP:
-      gs->mouse.button1 = e.button.which & SDL_BUTTON_LMASK;
-      gs->mouse.button2 = e.button.which & SDL_BUTTON_RMASK;
-      SDL_Log("Mouse button pressed or something!");
+      switch (e.button.button) {
+      case SDL_BUTTON_LEFT:
+        // catch all tap events always because the user notices if we don't
+        if (e.button.state == SDL_PRESSED &&
+            (SDL_HasIntersection(&gs->menu.tapbutton.rect, &gs->mouse.rect))) {
+          gs->taps++;
+          gs->menu.open = false;
+          gs->mouse.button1 = false;
+          e.button.state = SDL_RELEASED;
+        }
+        gs->mouse.button1 = (e.button.state == SDL_PRESSED);
+        break;
+      case SDL_BUTTON_RIGHT:
+        gs->mouse.button2 = (e.button.state == SDL_PRESSED);
+        break;
+      }
       break;
     case SDL_QUIT:
       printf("quit requested\n");
@@ -124,7 +137,6 @@ void handle_events(game_state *gs) {
       break;
     }
   }
-  SDL_ShowCursor(!gs->mouse.captured);
 }
 
 #undef main // to shut up winders
@@ -150,6 +162,8 @@ extern "C" int main(int argc, char **argv) {
   gs.clouds.rect.y = 24;
   gs.clouds.rect.w = 128;
   gs.clouds.rect.h = 128;
+  gs.mouse.rect.w = 1;
+  gs.mouse.rect.h = 1;
 
   if (!init_menu(&gs)) {
     return die();
@@ -158,7 +172,8 @@ extern "C" int main(int argc, char **argv) {
 #ifdef __EMSCRIPTEN__
   // EM_ASM(document.getElementById('canvas').style.width = '512px');
   // EM_ASM(document.getElementById('canvas').style.height = '512px');
-  // IMPORTANT(caf): this set and unset loop is a weird workaround I found to
+  // IMPORTANT(caf): this set and unset loop is a weird workaround I found
+  // to
   // shut emscripten up
   // about a main loop when using SDL2
   emscripten_set_main_loop_arg(&emscripten_loop_workaround, (void *)&gs, 0, 0);
@@ -276,7 +291,6 @@ void main_loop(game_state *gs) {
   // SDL_SetRenderDrawBlendMode(gs->sdlRenderer, SDL_BLENDMODE_BLEND);
   // SDL_RenderFillRect(gs->sdlRenderer, &button);
   //
-  SDL_Rect mousepos = {gs->mouse.x, gs->mouse.y, 1, 1};
   SDL_SetRenderDrawColor(gs->sdlRenderer, 20, 20, 40, 240);
   // if (SDL_HasIntersection(&button, &mousepos)) {
   //   SDL_SetRenderDrawColor(gs->sdlRenderer, 128, 128, 160, 240);
@@ -289,14 +303,18 @@ void main_loop(game_state *gs) {
   // pos.y = 100;
   // SDL_RenderCopy(gs->sdlRenderer, gs->font, &letter, &pos);
 
-  SDL_RenderFillRect(gs->sdlRenderer, &mousepos);
+  SDL_RenderFillRect(gs->sdlRenderer, &gs->mouse.rect);
 
   SDL_RenderPresent(gs->sdlRenderer);
   gs->frames++;
   if (SDL_GetTicks() - gs->lastFPSstamp > 1000) {
-    printf("%d fps\n", gs->frames);
-    sprintf(gs->fps_text, "%d fps", gs->frames);
-    gs->menu.item = (const char *)gs->fps_text;
+    if (gs->mouse.button1) {
+      SDL_Log("Mouse button 1 down!");
+    }
+    if (gs->mouse.button2) {
+      SDL_Log("Mouse button 2 down!");
+    }
+    gs->fps = gs->frames;
     gs->frames = 0;
     gs->lastFPSstamp = SDL_GetTicks();
   }
