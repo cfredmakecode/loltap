@@ -28,9 +28,9 @@ void render_text(game_state *gs, const char *text, int x, int y) {
       continue;
     }
     SDL_Rect letter = {(offset % 10) * 5, (offset / 10) * 8, 5, 8};
-    SDL_Rect pos = {x, y, 10, 16};
+    SDL_Rect pos = {x, y, 5, 8};
     SDL_RenderCopy(gs->sdlRenderer, gs->menu.font, &letter, &pos);
-    x += 12;
+    x += 5 + 2;
     l++;
   }
 }
@@ -63,20 +63,24 @@ void tick_menu(game_state *gs) {
       gs->menu.rect.y = gs->mouse.rect.y;
     } else {
       gs->menu.open = false;
-      gs->mouse.button1 = false;
+      // gs->mouse.button1 = false;
     }
   }
   gs->menu.rect.w = 96;
   gs->menu.rect.h = 96;
 }
 
-#define LINE_HEIGHT_IN_PX 18
+#define LINE_HEIGHT_IN_PX 9
 
 void render_menu(game_state *gs) {
   SDL_SetRenderDrawBlendMode(gs->sdlRenderer, SDL_BLENDMODE_BLEND);
   if (SDL_HasIntersection(&gs->menu.tapbutton.rect, &gs->mouse.rect)) {
     SDL_SetRenderDrawColor(gs->sdlRenderer, 0xff, 0xff, 0xff, 180);
     SDL_RenderDrawRect(gs->sdlRenderer, &gs->menu.tapbutton.rect);
+  }
+  if (gs->mouse.on_tap_target) {
+    SDL_SetRenderDrawColor(gs->sdlRenderer, 0xff, 0xff, 0xff, 180);
+    SDL_RenderFillRect(gs->sdlRenderer, &gs->menu.tapbutton.rect);
   }
   SDL_SetRenderDrawColor(gs->sdlRenderer, 0x00, 0x00, 0xff, 64);
   SDL_RenderFillRect(gs->sdlRenderer, &gs->menu.tapbutton.rect);

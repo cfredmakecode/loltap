@@ -70,21 +70,32 @@ void handle_events(game_state *gs) {
       gs->mouse.rect.y = e.motion.y;
       break;
     case SDL_MOUSEBUTTONDOWN:
+      switch (e.button.button) {
+      case SDL_BUTTON_LEFT:
+        gs->mouse.timestamp = SDL_GetTicks();
+        // catch all tap events always because the user notices if we don't
+        if ((SDL_HasIntersection(&gs->menu.tapbutton.rect, &gs->mouse.rect))) {
+          gs->taps++;
+          gs->mouse.on_tap_target = true;
+          gs->menu.open = false;
+        }
+        gs->mouse.button1 = true;
+        break;
+      case SDL_BUTTON_RIGHT:
+        gs->mouse.button2 = true;
+        break;
+        break;
+      }
+      break;
     case SDL_MOUSEBUTTONUP:
       switch (e.button.button) {
       case SDL_BUTTON_LEFT:
-        // catch all tap events always because the user notices if we don't
-        if (e.button.state == SDL_PRESSED &&
-            (SDL_HasIntersection(&gs->menu.tapbutton.rect, &gs->mouse.rect))) {
-          gs->taps++;
-          gs->menu.open = false;
-          gs->mouse.button1 = false;
-          e.button.state = SDL_RELEASED;
-        }
-        gs->mouse.button1 = (e.button.state == SDL_PRESSED);
+        gs->mouse.timestamp = 0;
+        gs->mouse.button1 = false;
+        gs->mouse.on_tap_target = false;
         break;
       case SDL_BUTTON_RIGHT:
-        gs->mouse.button2 = (e.button.state == SDL_PRESSED);
+        gs->mouse.button2 = false;
         break;
       }
       break;
@@ -182,11 +193,13 @@ extern "C" int main(int argc, char **argv) {
   SDL_CreateWindowAndRenderer(SCREEN_W, SCREEN_H, 0, &gs.sdlWindow,
                               &gs.sdlRenderer);
   SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
-  SDL_RenderSetLogicalSize(gs.sdlRenderer, 128, 128);
+#define HEIGHT 128
+#define WIDTH 128
+  SDL_RenderSetLogicalSize(gs.sdlRenderer, HEIGHT, WIDTH);
 #ifdef __EMSCRIPTEN__
   emscripten_cancel_main_loop();
 #endif
-  printf("set 128x128 rendering res\n");
+  printf("set rendering res %dx%d\n", HEIGHT, WIDTH);
   for (int i = 0; i < ARRAY_COUNT(things_to_load); i++) {
     if (!load_texture_from_bitmap(gs.sdlRenderer, things_to_load[i].tex,
                                   things_to_load[i].filename)) {
@@ -211,6 +224,7 @@ extern "C" int main(int argc, char **argv) {
   return 0;
 }
 
+#define HELD_DOWN_MIN_TICKS 300
 void main_loop(game_state *gs) {
   while (1) {
     uint32_t toWait = SDL_GetTicks() - gs->lastMs;
@@ -222,8 +236,17 @@ void main_loop(game_state *gs) {
     }
     SDL_Delay(1);
     // todo sleep a bit less silly-ly, handle shorter periods correctly
+    // TODO fix tickrate to tick multiple times till caught up, currently ticks
+    // are based on FPS, just capped at 60
   }
   gs->ticks++;
+  if (gs->mouse.on_tap_target && gs->mouse.timestamp &&
+      SDL_GetTicks() - gs->mouse.timestamp > HELD_DOWN_MIN_TICKS) {
+    // obviously trickery with rate of auto click stuff goes here later
+    if (gs->ticks % 30 == 0) {
+      gs->taps++;
+    }
+  }
   /// todo handle having to step multiple ticks because fps got behind
   handle_events(gs);
   tick_chicken(gs);
@@ -232,9 +255,11 @@ void main_loop(game_state *gs) {
   SDL_SetRenderDrawColor(gs->sdlRenderer, 69, 150, 240, 255);
   //
   SDL_RenderClear(gs->sdlRenderer);
-
   SDL_RenderCopy(gs->sdlRenderer, gs->bg, 0, 0);
   SDL_RenderCopy(gs->sdlRenderer, gs->road, 0, 0);
+
+  // SDL_RenderCopy(gs->sdlRenderer, gs->bg, 0, 0);
+  // SDL_RenderCopy(gs->sdlRenderer, gs->road, 0, 0);
 
   if (gs->ticks % 100 == 0) {
     gs->clouds.rect.x++;

@@ -35,7 +35,9 @@ typedef struct game_state {
   struct {
     SDL_Rect rect;
     bool32 captured;
+    bool32 on_tap_target;
     bool32 button1, button2;
+    uint32_t timestamp;
   } mouse;
   int frames;
   uint32_t lastMs;
