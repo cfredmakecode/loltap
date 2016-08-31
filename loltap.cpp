@@ -2,6 +2,7 @@
 
 #include "chicken.cpp"
 #include "menu.cpp"
+#include "peon.cpp"
 
 void handle_events(game_state *gs) {
   SDL_Event e;
@@ -76,6 +77,7 @@ void handle_events(game_state *gs) {
         // catch all tap events always because the user notices if we don't
         if ((SDL_HasIntersection(&gs->menu.tapbutton.rect, &gs->mouse.rect))) {
           gs->taps++;
+          add_peon(gs);
           gs->mouse.on_tap_target = true;
           gs->menu.open = false;
         }
@@ -157,24 +159,23 @@ typedef struct loadable {
   const char *filename;
 } loadable;
 
-#define ARRAY_COUNT(thing) sizeof(thing) / sizeof(thing[0])
 extern "C" int main(int argc, char **argv) {
   game_state gs = {0};
   gs.running = 1;
   gs.lastMs = SDL_GetTicks();
   gs.lastFPSstamp = gs.lastMs;
   printf("hi\n");
-  loadable things_to_load[] = {{&gs.bg, "bg_bg.png"},
-                               {&gs.tower, "bg_tower.png"},
-                               {&gs.road, "bg_road.png"},
-                               {&gs.clouds.tex, "clouds.png"},
-                               {&gs.menu.font, "font.png"}};
+  loadable things_to_load[] = {
+      {&gs.bg, "bg_bg.png"},          {&gs.tower, "bg_tower.png"},
+      {&gs.road, "bg_road.png"},      {&gs.clouds.tex, "clouds.png"},
+      {&gs.default_peon, "peon.png"}, {&gs.menu.font, "font.png"}};
   gs.clouds.rect.x = 0;
   gs.clouds.rect.y = 24;
   gs.clouds.rect.w = 128;
   gs.clouds.rect.h = 128;
   gs.mouse.rect.w = 1;
   gs.mouse.rect.h = 1;
+  add_peon(&gs);
 
   if (!init_menu(&gs)) {
     return die();
@@ -193,13 +194,11 @@ extern "C" int main(int argc, char **argv) {
   SDL_CreateWindowAndRenderer(SCREEN_W, SCREEN_H, 0, &gs.sdlWindow,
                               &gs.sdlRenderer);
   SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
-#define HEIGHT 128
-#define WIDTH 128
-  SDL_RenderSetLogicalSize(gs.sdlRenderer, HEIGHT, WIDTH);
+  SDL_RenderSetLogicalSize(gs.sdlRenderer, LOGICAL_WIDTH, LOGICAL_HEIGHT);
 #ifdef __EMSCRIPTEN__
   emscripten_cancel_main_loop();
 #endif
-  printf("set rendering res %dx%d\n", HEIGHT, WIDTH);
+  printf("set rendering res %dx%d\n", LOGICAL_HEIGHT, LOGICAL_WIDTH);
   for (int i = 0; i < ARRAY_COUNT(things_to_load); i++) {
     if (!load_texture_from_bitmap(gs.sdlRenderer, things_to_load[i].tex,
                                   things_to_load[i].filename)) {
@@ -236,7 +235,8 @@ void main_loop(game_state *gs) {
     }
     SDL_Delay(1);
     // todo sleep a bit less silly-ly, handle shorter periods correctly
-    // TODO fix tickrate to tick multiple times till caught up, currently ticks
+    // TODO fix tickrate to tick multiple times till caught up, currently
+    // ticks
     // are based on FPS, just capped at 60
   }
   gs->ticks++;
@@ -245,12 +245,14 @@ void main_loop(game_state *gs) {
     // obviously trickery with rate of auto click stuff goes here later
     if (gs->ticks % 30 == 0) {
       gs->taps++;
+      add_peon(gs);
     }
   }
   /// todo handle having to step multiple ticks because fps got behind
   handle_events(gs);
   tick_chicken(gs);
   tick_menu(gs);
+  tick_peons(gs);
   // todo sky color here
   SDL_SetRenderDrawColor(gs->sdlRenderer, 69, 150, 240, 255);
   //
@@ -287,6 +289,7 @@ void main_loop(game_state *gs) {
   SDL_RenderCopyEx(gs->sdlRenderer, gs->clouds.tex, 0, &r, 0, 0,
                    SDL_FLIP_HORIZONTAL);
   render_chicken(gs);
+  render_peons(gs);
   r.y += 6;
   r.x -= 24;
   SDL_RenderCopy(gs->sdlRenderer, gs->clouds.tex, 0, &r);
@@ -329,6 +332,8 @@ void main_loop(game_state *gs) {
   // SDL_RenderCopy(gs->sdlRenderer, gs->font, &letter, &pos);
 
   SDL_RenderFillRect(gs->sdlRenderer, &gs->mouse.rect);
+
+  render_drawitemstack(&gs->drawitems, gs->sdlRenderer);
 
   SDL_RenderPresent(gs->sdlRenderer);
   gs->frames++;

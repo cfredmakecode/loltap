@@ -13,9 +13,12 @@
 
 #define bool32 int32_t
 
-#define SCREEN_H 640
-#define SCREEN_W 640
+#define SCREEN_H 512
+#define SCREEN_W 512
+#define LOGICAL_HEIGHT 128
+#define LOGICAL_WIDTH 128
 #define MS_PER_TICK 1000 / 60
+#define ARRAY_COUNT(thing) sizeof(thing) / sizeof(thing[0])
 
 typedef struct chicken_info {
   SDL_Texture *tex;
@@ -24,14 +27,36 @@ typedef struct chicken_info {
   int x, y;
 } chicken;
 
+typedef struct peon {
+  SDL_Rect pos;
+  int frame;
+  int which;
+  int speed;
+  uint32_t ticks;
+  bool32 alive;
+} peon;
+
+typedef struct drawitem {
+  drawitem *next;
+  SDL_Rect src, dst;
+  SDL_Texture *tex;
+} drawitem;
+
+typedef struct drawitemstack {
+  size_t count, capacity;
+  drawitem *stack;
+} drawitemstack;
+
 typedef struct game_state {
   uint32_t taps;
   uint32_t ticks;
   uint32_t fps;
   SDL_Renderer *sdlRenderer;
   SDL_Window *sdlWindow;
-  SDL_Texture *bg, *tower, *road;
+  SDL_Texture *bg, *tower, *road, *default_peon;
   bool32 running;
+  peon *peons[100];
+  drawitemstack drawitems;
   struct {
     SDL_Rect rect;
     bool32 captured;
@@ -100,6 +125,47 @@ bool32 die() {
 #endif
   SDL_Quit();
   return false;
+}
+
+// prepare to draw an item later. will be sorted by z before actually blitting
+// to screen
+// naive and slow
+void push_drawitem(drawitemstack *d, SDL_Texture *tex, SDL_Rect *src,
+                   SDL_Rect *dst) {
+  if (d->stack == 0) {
+    d->stack = (drawitem *)malloc(1000 * sizeof(drawitem));
+    d->capacity = 1000;
+  }
+  if (d->capacity == d->count) {
+    SDL_Log("too many items in drawitems stack! bailing to let you know. "
+            "enjoy! :D");
+    die();
+  }
+  // stored as a linked list even though it's a raw n * size stack, we need to
+  // access both ways to sort and draw in the desired order easily later
+  drawitem *prev = d->stack + d->count;
+  d->count++;
+  drawitem *next = d->stack + d->count;
+  prev->next = next;
+  next->dst = *dst;
+  next->src = *src;
+  next->tex = tex;
+  next->next = 0;
+}
+
+void sort_drawitems(drawitem *d) {
+  // rewrite the next pointers in place based on y position
+}
+
+void render_drawitemstack(drawitemstack *d, SDL_Renderer *renderer) {
+  // no-op
+  d->count = 0;
+  drawitem *p = d->stack;
+  sort_drawitemstack(d);
+  while (p != 0) {
+    SDL_RenderCopy(renderer, p->tex, &p->src, &p->dst);
+    p = p->next;
+  }
 }
 
 #endif

@@ -36,10 +36,10 @@ void render_text(game_state *gs, const char *text, int x, int y) {
 }
 
 bool32 init_menu(game_state *gs) {
-  gs->menu.tapbutton.rect.y = 100;
-  gs->menu.tapbutton.rect.x = 0;
-  gs->menu.tapbutton.rect.w = 128;
-  gs->menu.tapbutton.rect.h = 28;
+  gs->menu.tapbutton.rect.y = 0;
+  gs->menu.tapbutton.rect.x = 100;
+  gs->menu.tapbutton.rect.w = 28;
+  gs->menu.tapbutton.rect.h = 30;
   tick_menu(gs);
   return true;
 }
