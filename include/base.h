@@ -1,7 +1,8 @@
 #ifndef BASE_H
 #define BASE_H
 
-#include <stdio.h>
+#include "vec.cpp"
+#include "stdio.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb/stb_image.h"
@@ -20,6 +21,16 @@
 #define MS_PER_TICK 1000 / 60
 #define ARRAY_COUNT(thing) sizeof(thing) / sizeof(thing[0])
 
+typedef struct target_node {
+  target_node *prev, *next;
+  v2 pos;
+} target_node;
+
+bool32 hit_target(target_node *target, v2 pos) {
+  float dist = magnitude(target->pos - pos);
+  return dist < 5.0f;
+}
+
 typedef struct chicken_info {
   SDL_Texture *tex;
   SDL_Rect rect;
@@ -27,13 +38,24 @@ typedef struct chicken_info {
   int x, y;
 } chicken;
 
+enum peon_type {
+  PEON_NORMAL,
+  PEON_CHICKEN,
+  PEON_TYPE_COUNT
+};
+
 typedef struct peon {
-  SDL_Rect pos;
+  v2 pos, dir;
+  float speed;
+  struct {
+    int w,h;
+  } size;
   int frame;
   int which;
-  int speed;
   uint32_t ticks;
   bool32 alive;
+  peon_type type;
+  target_node *target; // where to walk towards
 } peon;
 
 typedef struct drawitem {
@@ -53,9 +75,11 @@ typedef struct game_state {
   uint32_t fps;
   SDL_Renderer *sdlRenderer;
   SDL_Window *sdlWindow;
-  SDL_Texture *bg, *tower, *road, *default_peon;
+  SDL_Texture *bg, *tower, *road, *default_peon, *isometric;
   bool32 running;
-  peon *peons[100];
+  peon *peons[1000];
+  target_node *targets[3];
+  int lastTargetIndex;
   drawitemstack drawitems;
   struct {
     SDL_Rect rect;
@@ -83,6 +107,7 @@ typedef struct game_state {
       SDL_Rect rect;
     } tapbutton;
   } menu;
+  uint32_t upgrades_unlocked;
 } game_state;
 
 void emscripten_loop_workaround(void *gs);
@@ -130,6 +155,7 @@ bool32 die() {
 // prepare to draw an item later. will be sorted by z before actually blitting
 // to screen
 // naive and slow
+// TODO obviously do the samn sorting at insertion time, complete DERP
 void push_drawitem(drawitemstack *d, SDL_Texture *tex, SDL_Rect *src,
                    SDL_Rect *dst) {
   if (d->stack == 0) {
@@ -141,31 +167,65 @@ void push_drawitem(drawitemstack *d, SDL_Texture *tex, SDL_Rect *src,
             "enjoy! :D");
     die();
   }
-  // stored as a linked list even though it's a raw n * size stack, we need to
-  // access both ways to sort and draw in the desired order easily later
-  drawitem *prev = d->stack + d->count;
-  d->count++;
-  drawitem *next = d->stack + d->count;
-  prev->next = next;
-  next->dst = *dst;
-  next->src = *src;
-  next->tex = tex;
-  next->next = 0;
-}
+  if (d->count == 0) {
+    // stored as a linked list even though it's a raw n * size stack, we need to
+    // access both ways to sort and draw in the desired order easily later
+    drawitem *next = d->stack + d->count;
+    next->dst = *dst;
+    next->src = *src;
+    next->tex = tex;
+    next->next = 0;
+    d->count++;
+    return;
+  }
 
-void sort_drawitems(drawitem *d) {
-  // rewrite the next pointers in place based on y position
+  drawitem *cur = d->stack;
+  drawitem *best = d->stack;
+  while (true) {
+    // follow links, compare y to each node
+    // if cury < newitemy && cury > highesty_less_than_cury:
+    // highesty_less_than_cury = cury
+    // when we've gotten next = 0:
+    // newitem.next = cur.next
+    // cur.next = newitem
+    // that's it? seems too easy
+    if (cur == 0) {
+      // end of the line for us
+      drawitem *next = d->stack + d->count;
+      next->dst = *dst;
+      next->src = *src;
+      next->tex = tex;
+      next->next = best->next;
+      best->next = next;
+      d->count++;
+      return;
+    }
+    // IMPORTANT(caf): we sort by y position + height because we left SDL's top-left origin coordinate system alone
+    // rather than flipping y. might want to eventually flip y if we do anything much more complex than a tappy game
+    // with autonomous simple peeps
+    if (dst->y+dst->h > cur->dst.y+cur->dst.h) {
+      best = cur;
+    }
+    cur = cur->next;
+  }
 }
 
 void render_drawitemstack(drawitemstack *d, SDL_Renderer *renderer) {
-  // no-op
   d->count = 0;
   drawitem *p = d->stack;
-  sort_drawitemstack(d);
   while (p != 0) {
-    SDL_RenderCopy(renderer, p->tex, &p->src, &p->dst);
+    SDL_Rect dst = p->dst;
+    dst.y -= p->src.h;
+    dst.x -= (p->src.w / 2);
+    SDL_RenderCopy(renderer, p->tex, &p->src, &dst);
     p = p->next;
   }
 }
+
+struct {
+  int multiplier, cost;
+  const char *name, *icon_path;
+} upgrades[] = {{2, 100, "double!", "double.png"},
+                {4, 1000, "quadruple!", "quadruple.png"}};
 
 #endif

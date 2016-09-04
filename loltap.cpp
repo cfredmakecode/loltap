@@ -85,7 +85,13 @@ void handle_events(game_state *gs) {
         break;
       case SDL_BUTTON_RIGHT:
         gs->mouse.button2 = true;
-        break;
+        gs->targets[gs->lastTargetIndex]->pos.x = gs->mouse.rect.x;
+        gs->targets[gs->lastTargetIndex]->pos.y = gs->mouse.rect.y;
+        int t = gs->lastTargetIndex;
+        int c = ARRAY_COUNT(gs->targets);
+        gs->lastTargetIndex = (t + 1) % c;
+        // gs->lastTargetIndex =
+        //     (gs->lastTargetIndex + 1) % ARRAY_COUNT(gs->targets);
         break;
       }
       break;
@@ -142,6 +148,11 @@ void handle_events(game_state *gs) {
         gs->running = false;
         die();
       }
+      if (e.key.keysym.sym == SDLK_SPACE) {
+        gs->taps++;
+        add_peon(gs);
+        break;
+      }
       printf("key: %c\n", e.key.keysym.sym);
       printf("key: %s\n", SDL_GetKeyName(e.key.keysym.sym));
       break;
@@ -165,16 +176,30 @@ extern "C" int main(int argc, char **argv) {
   gs.lastMs = SDL_GetTicks();
   gs.lastFPSstamp = gs.lastMs;
   printf("hi\n");
-  loadable things_to_load[] = {
-      {&gs.bg, "bg_bg.png"},          {&gs.tower, "bg_tower.png"},
-      {&gs.road, "bg_road.png"},      {&gs.clouds.tex, "clouds.png"},
-      {&gs.default_peon, "peon.png"}, {&gs.menu.font, "font.png"}};
+  loadable things_to_load[] = {{&gs.bg, "bg_BG.png"},
+                               {&gs.tower, "bg_Tower.png"},
+                               {&gs.road, "bg_Road.png"},
+                               {&gs.clouds.tex, "clouds.png"},
+                               {&gs.isometric, "isometrics.png"},
+                               {&gs.default_peon, "peon.png"},
+                               {&gs.menu.font, "font.png"}};
   gs.clouds.rect.x = 0;
   gs.clouds.rect.y = 24;
   gs.clouds.rect.w = 128;
   gs.clouds.rect.h = 128;
   gs.mouse.rect.w = 1;
   gs.mouse.rect.h = 1;
+
+  target_node debug_target_node = {0, 0, {16.0f, 100.0f}};
+  target_node second_target_node = {0, 0, {100.0f, 16.0f}};
+  target_node third_target_node = {0, 0, {120.0f, 50.0f}};
+  debug_target_node.next = &second_target_node;
+  second_target_node.next = &third_target_node;
+  third_target_node.next = &debug_target_node;
+  gs.targets[0] = &debug_target_node;
+  gs.targets[1] = &second_target_node;
+  gs.targets[2] = &third_target_node;
+
   add_peon(&gs);
 
   if (!init_menu(&gs)) {
@@ -200,14 +225,18 @@ extern "C" int main(int argc, char **argv) {
 #endif
   printf("set rendering res %dx%d\n", LOGICAL_HEIGHT, LOGICAL_WIDTH);
   for (int i = 0; i < ARRAY_COUNT(things_to_load); i++) {
-    if (!load_texture_from_bitmap(gs.sdlRenderer, things_to_load[i].tex,
-                                  things_to_load[i].filename)) {
+    char buf[1024];
+    sprintf(buf, "assets/%s", things_to_load[i].filename);
+    if (!load_texture_from_bitmap(gs.sdlRenderer, things_to_load[i].tex, buf)) {
+      SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Missing file", buf, NULL);
       return die();
     }
     printf("loaded %s!\n", things_to_load[i].filename);
   }
   if (!init_chicken(&gs)) {
     printf("bailing!\n");
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Missing file", "chicken?",
+                             NULL);
     return 1;
   };
 
@@ -243,7 +272,7 @@ void main_loop(game_state *gs) {
   if (gs->mouse.on_tap_target && gs->mouse.timestamp &&
       SDL_GetTicks() - gs->mouse.timestamp > HELD_DOWN_MIN_TICKS) {
     // obviously trickery with rate of auto click stuff goes here later
-    if (gs->ticks % 30 == 0) {
+    if (gs->ticks % 10 == 0) {
       gs->taps++;
       add_peon(gs);
     }
@@ -257,8 +286,9 @@ void main_loop(game_state *gs) {
   SDL_SetRenderDrawColor(gs->sdlRenderer, 69, 150, 240, 255);
   //
   SDL_RenderClear(gs->sdlRenderer);
-  SDL_RenderCopy(gs->sdlRenderer, gs->bg, 0, 0);
-  SDL_RenderCopy(gs->sdlRenderer, gs->road, 0, 0);
+  // SDL_RenderCopy(gs->sdlRenderer, gs->bg, 0, 0);
+  // SDL_RenderCopy(gs->sdlRenderer, gs->road, 0, 0);
+  SDL_RenderCopy(gs->sdlRenderer, gs->isometric, 0, 0);
 
   // SDL_RenderCopy(gs->sdlRenderer, gs->bg, 0, 0);
   // SDL_RenderCopy(gs->sdlRenderer, gs->road, 0, 0);
@@ -269,16 +299,15 @@ void main_loop(game_state *gs) {
   if (gs->clouds.rect.x > 128) {
     gs->clouds.rect.x = -128;
   }
-  SDL_SetTextureAlphaMod(gs->clouds.tex, 255);
+  SDL_SetRenderDrawBlendMode(gs->sdlRenderer, SDL_BLENDMODE_BLEND);
+  SDL_SetTextureAlphaMod(gs->clouds.tex, 0xA0);
   SDL_RenderCopy(gs->sdlRenderer, gs->clouds.tex, 0, &gs->clouds.rect);
   SDL_Rect r = gs->clouds.rect;
-  r.x += 2;
-  r.y += 2;
-  SDL_RenderCopy(gs->sdlRenderer, gs->clouds.tex, 0, &r);
+  // r.x += 2;
+  // r.y += 2;
+  // SDL_RenderCopy(gs->sdlRenderer, gs->clouds.tex, 0, &r);
 
-  SDL_RenderCopy(gs->sdlRenderer, gs->tower, 0, 0);
-
-  render_chicken(gs);
+  // SDL_RenderCopy(gs->sdlRenderer, gs->tower, 0, 0);
 
   // pretend more clouds
   r.x = ((gs->ticks / 8) % 256) - 128;
@@ -288,7 +317,7 @@ void main_loop(game_state *gs) {
   SDL_SetTextureAlphaMod(gs->clouds.tex, 128);
   SDL_RenderCopyEx(gs->sdlRenderer, gs->clouds.tex, 0, &r, 0, 0,
                    SDL_FLIP_HORIZONTAL);
-  render_chicken(gs);
+  // render_chicken(gs);
   render_peons(gs);
   r.y += 6;
   r.x -= 24;
@@ -331,9 +360,26 @@ void main_loop(game_state *gs) {
   // pos.y = 100;
   // SDL_RenderCopy(gs->sdlRenderer, gs->font, &letter, &pos);
 
-  SDL_RenderFillRect(gs->sdlRenderer, &gs->mouse.rect);
-
   render_drawitemstack(&gs->drawitems, gs->sdlRenderer);
+
+  for (int i = 0; i < ARRAY_COUNT(gs->targets); i++) {
+    SDL_Rect temp = {0};
+    temp.h = 4;
+    temp.w = 4;
+    temp.x = gs->targets[i]->pos.x - 1;
+    temp.y = gs->targets[i]->pos.y - 1;
+    SDL_SetRenderDrawColor(gs->sdlRenderer, 0xff, 0xff, 0xff, 0xff);
+    SDL_RenderDrawRect(gs->sdlRenderer, &temp);
+    temp.h = 2;
+    temp.w = 2;
+    temp.x += 1;
+    temp.y += 1;
+    SDL_SetRenderDrawColor(gs->sdlRenderer, 200, 20, 40, 0xff);
+    SDL_RenderDrawRect(gs->sdlRenderer, &temp);
+  }
+
+  SDL_SetRenderDrawColor(gs->sdlRenderer, 20, 20, 40, 240);
+  SDL_RenderFillRect(gs->sdlRenderer, &gs->mouse.rect);
 
   SDL_RenderPresent(gs->sdlRenderer);
   gs->frames++;

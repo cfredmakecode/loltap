@@ -2,7 +2,7 @@
 
 bool32 init_chicken(game_state *gs) {
   if (!load_texture_from_bitmap(gs->sdlRenderer, &gs->chicken.tex,
-                                "chicken_chicken.png")) {
+                                "assets/chicken_chicken.png")) {
     SDL_Quit();
     return false;
   }
@@ -12,11 +12,10 @@ bool32 init_chicken(game_state *gs) {
   gs->chicken.rect.y = 0;
   gs->chicken.rect.w = 16;
   gs->chicken.rect.h = 16;
-  gs->chicken.x = 50;
-  gs->chicken.y = 50;
+  gs->chicken.x = 100;
+  gs->chicken.y = 100;
   return true;
 }
-
 void tick_chicken(game_state *gs) {
   if (gs->ticks % 10 == 0) {
     gs->chicken.frame = (gs->chicken.frame + 1) % 6;
