@@ -17,7 +17,7 @@ internal void add_peon(peon_stack *peons, game_state *gs) {
       peons->count++;
       p->pos.x = (rand() % 12) - 6 + peons->spawner.x;
       p->pos.y = (rand() % 8) - 4 + peons->spawner.y;
-      p->speed = ((rand() % 8) * 0.1f) + 0.1f;
+      p->speed = ((rand() % 100) * 0.02f) + 0.6f;
       p->size.h = 5;
       p->size.w = 5;
       p->frame = 0;
@@ -58,7 +58,7 @@ internal void tick_peons(peon_stack *peons) {
       if (p->ticks % 10 == 0) {
         p->frame = (p->frame + 1) % 5;
       }
-      if (p->ticks % 60 == 0) { // don't change our direction too quickly
+      if (p->ticks % 30 == 0) { // don't change our direction too quickly
         ASSERT(p->target != 0);
         p->dir = normalize(p->target->pos - p->pos);
       }

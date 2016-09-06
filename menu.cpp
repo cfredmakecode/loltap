@@ -123,4 +123,6 @@ void render_menu(game_state *gs) {
   render_text(gs, buf, 2, 2);
   sprintf(buf, "%u fps", gs->fps);
   render_text(gs, buf, 2, LOGICAL_HEIGHT - 20);
+  sprintf(buf, "%u peons", gs->peons.count);
+  render_text(gs, buf, 2, LOGICAL_HEIGHT - 40);
 }

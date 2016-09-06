@@ -21,10 +21,19 @@
 #define SCREEN_W 1280
 #define LOGICAL_HEIGHT 720
 #define LOGICAL_WIDTH 1280
+#define MAX_SCROLL_X 1000
+#define MAX_SCROLL_Y 1000
+#define MIN_SCROLL_X -1000
+#define MIN_SCROLL_Y -1000
 #define MS_PER_TICK 1000 / 60
 
 #define ARRAY_COUNT(thing) sizeof(thing) / sizeof(thing[0])
-#define ASSERT(thing) if (!(thing)) {SDL_ShowSimpleMessageBox(0,"assertion failed!",0,0); int *p; *p = 0;}
+#define ASSERT(thing)                                                         \
+if (!(thing)) {                                                              \
+  SDL_ShowSimpleMessageBox(0,"assertion failed!",0,0);                       \
+  char *blowup = 0;                                                          \
+  *blowup = 'Y';                                                             \
+}
 
 typedef struct target_node {
   target_node *prev, *next;
@@ -100,7 +109,7 @@ typedef struct game_state {
     SDL_Rect rect;
     bool32 captured;
     bool32 on_tap_target;
-    bool32 button1, button2;
+    bool32 button1, button2, button3;
     uint32_t timestamp;
   } mouse;
   int frames;
@@ -124,6 +133,9 @@ typedef struct game_state {
   } menu;
   uint32_t upgrades_unlocked;
   v2 scroll;
+  f32 zoom;
+  SDL_Cursor *handcursor;
+  SDL_Cursor *arrowcursor;
 } game_state;
 
 void emscripten_loop_workaround(void *gs);
@@ -174,13 +186,14 @@ bool32 die() {
 void push_drawitem(drawitem_stack *d, SDL_Texture *tex, SDL_Rect *src,
                    SDL_Rect *dst) {
   if (d->stack == 0) {
-    d->stack = (drawitem *)malloc(1000 * sizeof(drawitem));
-    d->capacity = 1000;
+    d->stack = (drawitem *)malloc(10000 * sizeof(drawitem));
+    d->capacity = 10000;
   }
   if (d->capacity == d->count) {
-    SDL_Log("too many items (1000) in drawitems stack! bailing to let you know. "
+    SDL_Log("too many items (10000) in drawitems stack! bailing to let you know. "
             "enjoy! :D");
     die();
+    ASSERT(false);
     return;
   }
   if (d->count == 0) {
@@ -237,7 +250,7 @@ void push_drawitem(drawitem_stack *d, SDL_Texture *tex, SDL_Rect *src,
   }
 }
 
-void render_drawitemstack(drawitem_stack *d, SDL_Renderer *renderer) {
+void render_drawitemstack(drawitem_stack *d, SDL_Renderer *renderer, game_state *gs) {
   d->count = 0;
   drawitem *p = d->stack;
   while (p != 0) {
@@ -246,10 +259,8 @@ void render_drawitemstack(drawitem_stack *d, SDL_Renderer *renderer) {
     dst.y -= p->dst.h; // bottom
     dst.x -= (p->dst.w / 2); // center
     // // flip y axis to increase up..
-    // dst.y = LOGICAL_HEIGHT - dst.y;
-    // if (dst.h > 32) {
-    //   SDL_Log("%d, %d, %d, %d", dst.x,dst.y,dst.h,dst.w);
-    // }
+    dst.y += gs->scroll.y;
+    dst.x += gs->scroll.x;
     if (p->hmirror) {
     SDL_RenderCopyEx(renderer, p->tex, &p->src, &dst, 0, 0, SDL_FLIP_HORIZONTAL);
   } else{
@@ -265,4 +276,21 @@ struct {
 } upgrades[] = {{2, 100, "double!", "double.png"},
                 {4, 1000, "quadruple!", "quadruple.png"}};
 
+
+void scroll_playfield_by(game_state *gs, int x, int y) {
+  gs->scroll.x += x;
+  gs->scroll.y += y;
+  if (gs->scroll.x > MAX_SCROLL_X) {
+    gs->scroll.x = MAX_SCROLL_X;
+  }
+  if (gs->scroll.y > MAX_SCROLL_Y) {
+    gs->scroll.y = MAX_SCROLL_Y;
+  }
+  if (gs->scroll.x < MIN_SCROLL_X) {
+    gs->scroll.x = MIN_SCROLL_X;
+  }
+  if (gs->scroll.y < MIN_SCROLL_Y) {
+    gs->scroll.y = MIN_SCROLL_Y;
+  }
+}
 #endif

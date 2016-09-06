@@ -76,6 +76,9 @@ extern "C" int main(int argc, char **argv) {
 
   add_peon(&gs.peons, &gs);
 
+  gs.handcursor = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_HAND);
+  gs.arrowcursor = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW);
+
 #ifdef __EMSCRIPTEN__
   emscripten_set_main_loop_arg(&emscripten_loop_workaround, (void *)&gs, 0, 1);
 #else
@@ -105,6 +108,7 @@ void main_loop(game_state *gs) {
     // are based on FPS, just capped at 60
   }
   gs->ticks++;
+
   if (gs->mouse.on_tap_target && gs->mouse.timestamp &&
       SDL_GetTicks() - gs->mouse.timestamp > HELD_DOWN_MIN_TICKS) {
     // obviously trickery with rate of auto click stuff goes here later
@@ -118,21 +122,23 @@ void main_loop(game_state *gs) {
   tick_menu(gs);
   tick_peons(&gs->peons);
 
-  SDL_SetRenderDrawColor(gs->sdlRenderer, 0xff, 0, 0xff, 0xff);
+  SDL_SetRenderDrawColor(gs->sdlRenderer, 0x49, 0x60, 0x0, 0xff);
   SDL_RenderClear(gs->sdlRenderer);
 
   SDL_Rect grid = {0};
   grid.w = 64;
   grid.h = 32;
-  for (grid.y = 0; grid.y < LOGICAL_HEIGHT; grid.y += grid.h) {
-    for (grid.x = 0; grid.x < LOGICAL_WIDTH; grid.x += grid.w) {
+  int scr_y = int(gs->scroll.y) % 32;
+  int scr_x = int(gs->scroll.x) % 64;
+  // to ensure we draw enough to go offscreen, give me another one
+  scr_y -= 32;
+  scr_x -= 64;
+  // and then add another in the other direction in this loop..
+  for (grid.y = scr_y; grid.y < LOGICAL_HEIGHT + 32; grid.y += grid.h) {
+    for (grid.x = scr_x; grid.x < LOGICAL_WIDTH + 64; grid.x += grid.w) {
       SDL_RenderCopy(gs->sdlRenderer, gs->grid, 0, &grid);
     }
   }
-  // SDL_RenderCopy(gs->sdlRenderer, gs->isometric, 0, 0);
-
-  // SDL_RenderCopy(gs->sdlRenderer, gs->bg, 0, 0);
-  // SDL_RenderCopy(gs->sdlRenderer, gs->road, 0, 0);
 
   if (gs->ticks % 100 == 0) {
     gs->clouds.rect.x++;
@@ -144,9 +150,6 @@ void main_loop(game_state *gs) {
   SDL_SetTextureAlphaMod(gs->clouds.tex, 0xA0);
   SDL_RenderCopy(gs->sdlRenderer, gs->clouds.tex, 0, &gs->clouds.rect);
   SDL_Rect r = gs->clouds.rect;
-  // r.x += 2;
-  // r.y += 2;
-  // SDL_RenderCopy(gs->sdlRenderer, gs->clouds.tex, 0, &r);
 
   // pretend more clouds
   r.x = ((gs->ticks / 8) % 256) - 128;
@@ -156,45 +159,10 @@ void main_loop(game_state *gs) {
   SDL_SetTextureAlphaMod(gs->clouds.tex, 128);
   SDL_RenderCopyEx(gs->sdlRenderer, gs->clouds.tex, 0, &r, 0, 0,
                    SDL_FLIP_HORIZONTAL);
-  // render_chicken(gs);
   render_peons(&gs->peons, &gs->drawitems);
   r.y += 6;
   r.x -= 24;
   SDL_RenderCopy(gs->sdlRenderer, gs->clouds.tex, 0, &r);
-
-  // SDL_Rect letter = {(gs->ticks / 100) % 10 * 5, 0, 5, 8};
-  // SDL_Rect pos = {16, 16, 10, 16};
-  // SDL_RenderCopy(gs->sdlRenderer, gs->font, &letter, &pos);
-  // letter.x = (gs->ticks / 100) % 10 * 5;
-  // letter.y = (gs->ticks / 100) % 4 * 8;
-  // letter.y = 8;
-  // pos.x = 30;
-  // SDL_RenderCopy(gs->sdlRenderer, gs->font, &letter, &pos);
-  // letter.x = (gs->ticks / 50) % 10 * 5;
-  // letter.y = (gs->ticks / 50) % 4 * 8;
-  // pos.x = 44;
-  // SDL_RenderCopy(gs->sdlRenderer, gs->font, &letter, &pos);
-  // letter.x = (gs->ticks / 160) % 10 * 5;
-  // letter.y = (gs->ticks / 160) % 4 * 8;
-  // pos.x = 58;
-  // SDL_RenderCopy(gs->sdlRenderer, gs->font, &letter, &pos);
-
-  // SDL_SetRenderDrawColor(gs->sdlRenderer, 40, 40, 60, 240);
-  // SDL_Rect button = {0, 96, 128, 32};
-  // SDL_SetRenderDrawBlendMode(gs->sdlRenderer, SDL_BLENDMODE_BLEND);
-  // SDL_RenderFillRect(gs->sdlRenderer, &button);
-  //
-  SDL_SetRenderDrawColor(gs->sdlRenderer, 20, 20, 40, 240);
-  // if (SDL_HasIntersection(&button, &mousepos)) {
-  //   SDL_SetRenderDrawColor(gs->sdlRenderer, 128, 128, 160, 240);
-  // }
-  // SDL_RenderDrawRect(gs->sdlRenderer, &button);
-
-  // letter.x = 10;
-  // letter.y = 0;
-  // pos.x = 30;
-  // pos.y = 100;
-  // SDL_RenderCopy(gs->sdlRenderer, gs->font, &letter, &pos);
 
   int w, h;
   SDL_QueryTexture(gs->tower, NULL, NULL, &w, &h);
@@ -228,14 +196,14 @@ void main_loop(game_state *gs) {
   towerdst.w = -towerdst.w;
   push_drawitem(&gs->drawitems, gs->tower, &towersrc, &towerdst);
 
-  render_drawitemstack(&gs->drawitems, gs->sdlRenderer);
+  render_drawitemstack(&gs->drawitems, gs->sdlRenderer, gs);
 
   for (int i = 0; i < ARRAY_COUNT(gs->targets); i++) {
     SDL_Rect temp = {0};
     temp.h = 4;
     temp.w = 4;
-    temp.x = gs->targets[i]->pos.x - 1;
-    temp.y = gs->targets[i]->pos.y - 1;
+    temp.x = gs->targets[i]->pos.x - 1 + gs->scroll.x;
+    temp.y = gs->targets[i]->pos.y - 1 + gs->scroll.y;
     SDL_SetRenderDrawColor(gs->sdlRenderer, 0xff, 0xff, 0xff, 0xff);
     SDL_RenderDrawRect(gs->sdlRenderer, &temp);
     temp.h = 2;

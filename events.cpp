@@ -40,12 +40,13 @@ void handle_events(game_state *gs) {
       case SDL_WINDOWEVENT_ENTER:
         SDL_Log("Mouse entered window %d", event->window.windowID);
         gs->mouse.captured = true;
-        // SDL_ShowCursor(!gs->mouse.captured);
         break;
       case SDL_WINDOWEVENT_LEAVE:
         SDL_Log("Mouse left window %d", event->window.windowID);
         gs->mouse.captured = false;
-        // SDL_ShowCursor(!gs->mouse.captured);
+        gs->mouse.button1 = false;
+        gs->mouse.button2 = false;
+        gs->mouse.button3 = false;
         break;
       case SDL_WINDOWEVENT_FOCUS_GAINED:
         SDL_Log("Window %d gained keyboard focus", event->window.windowID);
@@ -63,6 +64,11 @@ void handle_events(game_state *gs) {
       }
     }
     case SDL_MOUSEMOTION:
+      if (gs->mouse.button3) {
+        SDL_SetCursor(gs->handcursor);
+        scroll_playfield_by(gs, e.motion.xrel, e.motion.yrel);
+        break;
+      }
       gs->mouse.rect.x = e.motion.x;
       gs->mouse.rect.y = e.motion.y;
       break;
@@ -79,13 +85,20 @@ void handle_events(game_state *gs) {
         }
         gs->mouse.button1 = true;
         break;
+      case SDL_BUTTON_MIDDLE:
+        gs->mouse.button3 = true;
+        break;
       case SDL_BUTTON_RIGHT:
         gs->mouse.button2 = true;
-        gs->targets[gs->lastTargetIndex]->pos.x = gs->mouse.rect.x;
-        gs->targets[gs->lastTargetIndex]->pos.y = gs->mouse.rect.y;
+        gs->targets[gs->lastTargetIndex]->pos.x =
+            gs->mouse.rect.x - gs->scroll.x;
+        gs->targets[gs->lastTargetIndex]->pos.y =
+            gs->mouse.rect.y - gs->scroll.y;
         int t = gs->lastTargetIndex;
         int c = ARRAY_COUNT(gs->targets);
         gs->lastTargetIndex = (t + 1) % c;
+        // gs->lastTargetIndex =
+        //     (gs->lastTargetIndex + 1) % ARRAY_COUNT(gs->targets);
         // gs->lastTargetIndex =
         //     (gs->lastTargetIndex + 1) % ARRAY_COUNT(gs->targets);
         break;
@@ -101,6 +114,10 @@ void handle_events(game_state *gs) {
       case SDL_BUTTON_RIGHT:
         gs->mouse.button2 = false;
         break;
+      case SDL_BUTTON_MIDDLE:
+        gs->mouse.button3 = false;
+        SDL_SetCursor(gs->arrowcursor);
+        break;
       }
       break;
     case SDL_QUIT:
@@ -112,15 +129,19 @@ void handle_events(game_state *gs) {
       switch (e.key.keysym.sym) {
       case SDLK_UP:
         gs->pad.up = true;
+        gs->scroll.y--;
         break;
       case SDLK_DOWN:
         gs->pad.down = true;
+        gs->scroll.y++;
         break;
       case SDLK_LEFT:
         gs->pad.left = true;
+        gs->scroll.x--;
         break;
       case SDLK_RIGHT:
         gs->pad.right = true;
+        gs->scroll.x++;
         break;
       }
       break;
@@ -143,6 +164,20 @@ void handle_events(game_state *gs) {
         printf("quit requested\n");
         gs->running = false;
         die();
+        break;
+      }
+      if (e.key.keysym.sym == 'c') {
+        printf("re-center requested\n");
+        gs->scroll.x = 0;
+        gs->scroll.y = 0;
+        break;
+      }
+      if (e.key.keysym.sym == 'a') {
+        printf("add 50 peons requested\n");
+        for (int i = 0; i < 50; i++) {
+          add_peon(&gs->peons, gs);
+        }
+        break;
       }
       if (e.key.keysym.sym == SDLK_SPACE) {
         gs->taps++;
