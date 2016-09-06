@@ -1,6 +1,5 @@
 #include "include/base.h"
 
-#include "chicken.cpp"
 #include "menu.cpp"
 #include "peon.cpp"
 #include "events.cpp"
@@ -74,12 +73,6 @@ extern "C" int main(int argc, char **argv) {
     }
     printf("loaded %s!\n", things_to_load[i].filename);
   }
-  if (!init_chicken(&gs)) {
-    printf("bailing!\n");
-    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Missing file", "chicken?",
-                             NULL);
-    return 1;
-  };
 
   add_peon(&gs.peons, &gs);
 
@@ -122,7 +115,6 @@ void main_loop(game_state *gs) {
   }
   /// todo handle having to step multiple ticks because fps got behind
   handle_events(gs);
-  tick_chicken(gs);
   tick_menu(gs);
   tick_peons(&gs->peons);
 
