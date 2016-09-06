@@ -3,192 +3,37 @@
 #include "chicken.cpp"
 #include "menu.cpp"
 #include "peon.cpp"
-
-void handle_events(game_state *gs) {
-  SDL_Event e;
-  while (SDL_PollEvent(&e)) {
-    switch (e.type) {
-    case SDL_WINDOWEVENT: {
-      SDL_Event *event = &e;
-      switch (event->window.event) {
-      case SDL_WINDOWEVENT_SHOWN:
-        SDL_Log("Window %d shown", event->window.windowID);
-        break;
-      case SDL_WINDOWEVENT_HIDDEN:
-        SDL_Log("Window %d hidden", event->window.windowID);
-        break;
-      case SDL_WINDOWEVENT_EXPOSED:
-        SDL_Log("Window %d exposed", event->window.windowID);
-        break;
-      case SDL_WINDOWEVENT_MOVED:
-        SDL_Log("Window %d moved to %d,%d", event->window.windowID,
-                event->window.data1, event->window.data2);
-        break;
-      case SDL_WINDOWEVENT_RESIZED:
-        SDL_Log("Window %d resized to %dx%d", event->window.windowID,
-                event->window.data1, event->window.data2);
-        break;
-      case SDL_WINDOWEVENT_SIZE_CHANGED:
-        SDL_Log("Window %d size changed to %dx%d", event->window.windowID,
-                event->window.data1, event->window.data2);
-        break;
-      case SDL_WINDOWEVENT_MINIMIZED:
-        SDL_Log("Window %d minimized", event->window.windowID);
-        break;
-      case SDL_WINDOWEVENT_MAXIMIZED:
-        SDL_Log("Window %d maximized", event->window.windowID);
-        break;
-      case SDL_WINDOWEVENT_RESTORED:
-        SDL_Log("Window %d restored", event->window.windowID);
-        break;
-      case SDL_WINDOWEVENT_ENTER:
-        SDL_Log("Mouse entered window %d", event->window.windowID);
-        gs->mouse.captured = true;
-        SDL_ShowCursor(!gs->mouse.captured);
-        break;
-      case SDL_WINDOWEVENT_LEAVE:
-        SDL_Log("Mouse left window %d", event->window.windowID);
-        gs->mouse.captured = false;
-        SDL_ShowCursor(!gs->mouse.captured);
-        break;
-      case SDL_WINDOWEVENT_FOCUS_GAINED:
-        SDL_Log("Window %d gained keyboard focus", event->window.windowID);
-        break;
-      case SDL_WINDOWEVENT_FOCUS_LOST:
-        SDL_Log("Window %d lost keyboard focus", event->window.windowID);
-        break;
-      case SDL_WINDOWEVENT_CLOSE:
-        SDL_Log("Window %d closed", event->window.windowID);
-        break;
-      default:
-        SDL_Log("Window %d got unknown event %d", event->window.windowID,
-                event->window.event);
-        break;
-      }
-    }
-    case SDL_MOUSEMOTION:
-      gs->mouse.rect.x = e.motion.x;
-      gs->mouse.rect.y = e.motion.y;
-      break;
-    case SDL_MOUSEBUTTONDOWN:
-      switch (e.button.button) {
-      case SDL_BUTTON_LEFT:
-        gs->mouse.timestamp = SDL_GetTicks();
-        // catch all tap events always because the user notices if we don't
-        if ((SDL_HasIntersection(&gs->menu.tapbutton.rect, &gs->mouse.rect))) {
-          gs->taps++;
-          add_peon(gs);
-          gs->mouse.on_tap_target = true;
-          gs->menu.open = false;
-        }
-        gs->mouse.button1 = true;
-        break;
-      case SDL_BUTTON_RIGHT:
-        gs->mouse.button2 = true;
-        gs->targets[gs->lastTargetIndex]->pos.x = gs->mouse.rect.x;
-        gs->targets[gs->lastTargetIndex]->pos.y = gs->mouse.rect.y;
-        int t = gs->lastTargetIndex;
-        int c = ARRAY_COUNT(gs->targets);
-        gs->lastTargetIndex = (t + 1) % c;
-        // gs->lastTargetIndex =
-        //     (gs->lastTargetIndex + 1) % ARRAY_COUNT(gs->targets);
-        break;
-      }
-      break;
-    case SDL_MOUSEBUTTONUP:
-      switch (e.button.button) {
-      case SDL_BUTTON_LEFT:
-        gs->mouse.timestamp = 0;
-        gs->mouse.button1 = false;
-        gs->mouse.on_tap_target = false;
-        break;
-      case SDL_BUTTON_RIGHT:
-        gs->mouse.button2 = false;
-        break;
-      }
-      break;
-    case SDL_QUIT:
-      printf("quit requested\n");
-      gs->running = false;
-      die();
-      break;
-    case SDL_KEYDOWN:
-      switch (e.key.keysym.sym) {
-      case SDLK_UP:
-        gs->pad.up = true;
-        break;
-      case SDLK_DOWN:
-        gs->pad.down = true;
-        break;
-      case SDLK_LEFT:
-        gs->pad.left = true;
-        break;
-      case SDLK_RIGHT:
-        gs->pad.right = true;
-        break;
-      }
-      break;
-    case SDL_KEYUP:
-      switch (e.key.keysym.sym) {
-      case SDLK_UP:
-        gs->pad.up = false;
-        break;
-      case SDLK_DOWN:
-        gs->pad.down = false;
-        break;
-      case SDLK_LEFT:
-        gs->pad.left = false;
-        break;
-      case SDLK_RIGHT:
-        gs->pad.right = false;
-        break;
-      }
-      if (e.key.keysym.sym == 'q') {
-        printf("quit requested\n");
-        gs->running = false;
-        die();
-      }
-      if (e.key.keysym.sym == SDLK_SPACE) {
-        gs->taps++;
-        add_peon(gs);
-        break;
-      }
-      printf("key: %c\n", e.key.keysym.sym);
-      printf("key: %s\n", SDL_GetKeyName(e.key.keysym.sym));
-      break;
-    default:
-      printf("event %u\n", e.type);
-      break;
-    }
-  }
-}
+#include "events.cpp"
 
 #undef main // to shut up winders
 
-typedef struct loadable {
-  SDL_Texture **tex;
-  const char *filename;
-} loadable;
-
 extern "C" int main(int argc, char **argv) {
+  srand(SDL_GetPerformanceCounter());
   game_state gs = {0};
   gs.running = 1;
   gs.lastMs = SDL_GetTicks();
   gs.lastFPSstamp = gs.lastMs;
-  printf("hi\n");
-  loadable things_to_load[] = {{&gs.bg, "bg_BG.png"},
-                               {&gs.tower, "bg_Tower.png"},
-                               {&gs.road, "bg_Road.png"},
-                               {&gs.clouds.tex, "clouds.png"},
-                               {&gs.isometric, "isometrics.png"},
-                               {&gs.default_peon, "peon.png"},
-                               {&gs.menu.font, "font.png"}};
+  struct {
+    SDL_Texture **tex;
+    const char *filename;
+  } things_to_load[] = {{&gs.bg, "bg_BG.png"},
+                        {&gs.tower, "tower.png"},
+                        {&gs.grid, "gridmaybe.png"},
+                        {&gs.road, "bg_Road.png"},
+                        {&gs.clouds.tex, "clouds.png"},
+                        {&gs.isometric, "isometrics.png"},
+                        {&gs.chicken.tex, "chicken_chicken.png"},
+                        {&gs.default_peon, "peon.png"},
+                        {&gs.menu.font, "font.png"}};
   gs.clouds.rect.x = 0;
   gs.clouds.rect.y = 24;
   gs.clouds.rect.w = 128;
   gs.clouds.rect.h = 128;
   gs.mouse.rect.w = 1;
   gs.mouse.rect.h = 1;
+
+  gs.peons.spawner.x = rand() % 500;
+  gs.peons.spawner.y = rand() % 500;
 
   target_node debug_target_node = {0, 0, {16.0f, 100.0f}};
   target_node second_target_node = {0, 0, {100.0f, 16.0f}};
@@ -200,29 +45,25 @@ extern "C" int main(int argc, char **argv) {
   gs.targets[1] = &second_target_node;
   gs.targets[2] = &third_target_node;
 
-  add_peon(&gs);
-
   if (!init_menu(&gs)) {
     return die();
   }
 
 #ifdef __EMSCRIPTEN__
-  // EM_ASM(document.getElementById('canvas').style.width = '512px');
-  // EM_ASM(document.getElementById('canvas').style.height = '512px');
   // IMPORTANT(caf): this set and unset loop is a weird workaround I found
-  // to
-  // shut emscripten up
-  // about a main loop when using SDL2
+  // to shut emscripten up about a main loop when using SDL2
   emscripten_set_main_loop_arg(&emscripten_loop_workaround, (void *)&gs, 0, 0);
 #endif
 
-  SDL_CreateWindowAndRenderer(SCREEN_W, SCREEN_H, 0, &gs.sdlWindow,
-                              &gs.sdlRenderer);
-  SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
+  SDL_CreateWindowAndRenderer(SCREEN_W, SCREEN_H, SDL_WINDOW_RESIZABLE,
+                              &gs.sdlWindow, &gs.sdlRenderer);
+  SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "best");
   SDL_RenderSetLogicalSize(gs.sdlRenderer, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+
 #ifdef __EMSCRIPTEN__
   emscripten_cancel_main_loop();
 #endif
+
   printf("set rendering res %dx%d\n", LOGICAL_HEIGHT, LOGICAL_WIDTH);
   for (int i = 0; i < ARRAY_COUNT(things_to_load); i++) {
     char buf[1024];
@@ -239,6 +80,8 @@ extern "C" int main(int argc, char **argv) {
                              NULL);
     return 1;
   };
+
+  add_peon(&gs.peons, &gs);
 
 #ifdef __EMSCRIPTEN__
   emscripten_set_main_loop_arg(&emscripten_loop_workaround, (void *)&gs, 0, 1);
@@ -274,21 +117,27 @@ void main_loop(game_state *gs) {
     // obviously trickery with rate of auto click stuff goes here later
     if (gs->ticks % 10 == 0) {
       gs->taps++;
-      add_peon(gs);
+      add_peon(&gs->peons, gs);
     }
   }
   /// todo handle having to step multiple ticks because fps got behind
   handle_events(gs);
   tick_chicken(gs);
   tick_menu(gs);
-  tick_peons(gs);
-  // todo sky color here
-  SDL_SetRenderDrawColor(gs->sdlRenderer, 69, 150, 240, 255);
-  //
+  tick_peons(&gs->peons);
+
+  SDL_SetRenderDrawColor(gs->sdlRenderer, 0xff, 0, 0xff, 0xff);
   SDL_RenderClear(gs->sdlRenderer);
-  // SDL_RenderCopy(gs->sdlRenderer, gs->bg, 0, 0);
-  // SDL_RenderCopy(gs->sdlRenderer, gs->road, 0, 0);
-  SDL_RenderCopy(gs->sdlRenderer, gs->isometric, 0, 0);
+
+  SDL_Rect grid = {0};
+  grid.w = 64;
+  grid.h = 32;
+  for (grid.y = 0; grid.y < LOGICAL_HEIGHT; grid.y += grid.h) {
+    for (grid.x = 0; grid.x < LOGICAL_WIDTH; grid.x += grid.w) {
+      SDL_RenderCopy(gs->sdlRenderer, gs->grid, 0, &grid);
+    }
+  }
+  // SDL_RenderCopy(gs->sdlRenderer, gs->isometric, 0, 0);
 
   // SDL_RenderCopy(gs->sdlRenderer, gs->bg, 0, 0);
   // SDL_RenderCopy(gs->sdlRenderer, gs->road, 0, 0);
@@ -307,8 +156,6 @@ void main_loop(game_state *gs) {
   // r.y += 2;
   // SDL_RenderCopy(gs->sdlRenderer, gs->clouds.tex, 0, &r);
 
-  // SDL_RenderCopy(gs->sdlRenderer, gs->tower, 0, 0);
-
   // pretend more clouds
   r.x = ((gs->ticks / 8) % 256) - 128;
   r.y = -2;
@@ -318,7 +165,7 @@ void main_loop(game_state *gs) {
   SDL_RenderCopyEx(gs->sdlRenderer, gs->clouds.tex, 0, &r, 0, 0,
                    SDL_FLIP_HORIZONTAL);
   // render_chicken(gs);
-  render_peons(gs);
+  render_peons(&gs->peons, &gs->drawitems);
   r.y += 6;
   r.x -= 24;
   SDL_RenderCopy(gs->sdlRenderer, gs->clouds.tex, 0, &r);
@@ -340,9 +187,6 @@ void main_loop(game_state *gs) {
   // pos.x = 58;
   // SDL_RenderCopy(gs->sdlRenderer, gs->font, &letter, &pos);
 
-  // "UI", if you will
-  render_menu(gs);
-
   // SDL_SetRenderDrawColor(gs->sdlRenderer, 40, 40, 60, 240);
   // SDL_Rect button = {0, 96, 128, 32};
   // SDL_SetRenderDrawBlendMode(gs->sdlRenderer, SDL_BLENDMODE_BLEND);
@@ -359,6 +203,38 @@ void main_loop(game_state *gs) {
   // pos.x = 30;
   // pos.y = 100;
   // SDL_RenderCopy(gs->sdlRenderer, gs->font, &letter, &pos);
+
+  int w, h;
+  SDL_QueryTexture(gs->tower, NULL, NULL, &w, &h);
+  SDL_Rect towersrc;
+  SDL_Rect towerdst;
+  towersrc.x = 0;
+  towersrc.y = 0;
+  towersrc.w = w;
+  towersrc.h = h;
+  towerdst.x = 200;
+  towerdst.y = 500;
+  towerdst.w = w / 2;
+  towerdst.h = h / 2;
+  push_drawitem(&gs->drawitems, gs->tower, &towersrc, &towerdst);
+  remembered_var int t2x = (rand() % LOGICAL_WIDTH);
+  towerdst.x = t2x;
+  remembered_var int t2y = (rand() % LOGICAL_HEIGHT);
+  towerdst.y = t2y;
+  towerdst.w = -towerdst.w;
+  push_drawitem(&gs->drawitems, gs->tower, &towersrc, &towerdst);
+  remembered_var int t3x = (rand() % LOGICAL_WIDTH);
+  towerdst.x = t3x;
+  remembered_var int t3y = (rand() % LOGICAL_HEIGHT);
+  towerdst.y = t3y;
+  towerdst.w = -towerdst.w;
+  push_drawitem(&gs->drawitems, gs->tower, &towersrc, &towerdst);
+  remembered_var int t4x = (rand() % LOGICAL_WIDTH);
+  towerdst.x = t4x;
+  remembered_var int t4y = (rand() % LOGICAL_HEIGHT);
+  towerdst.y = t4y;
+  towerdst.w = -towerdst.w;
+  push_drawitem(&gs->drawitems, gs->tower, &towersrc, &towerdst);
 
   render_drawitemstack(&gs->drawitems, gs->sdlRenderer);
 
@@ -377,6 +253,9 @@ void main_loop(game_state *gs) {
     SDL_SetRenderDrawColor(gs->sdlRenderer, 200, 20, 40, 0xff);
     SDL_RenderDrawRect(gs->sdlRenderer, &temp);
   }
+
+  // "UI", if you will
+  render_menu(gs);
 
   SDL_SetRenderDrawColor(gs->sdlRenderer, 20, 20, 40, 240);
   SDL_RenderFillRect(gs->sdlRenderer, &gs->mouse.rect);

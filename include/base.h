@@ -13,13 +13,18 @@
 #endif
 
 #define bool32 int32_t
+#define f32 float
+#define internal static
+#define remembered_var static
 
-#define SCREEN_H 512
-#define SCREEN_W 512
-#define LOGICAL_HEIGHT 128
-#define LOGICAL_WIDTH 128
+#define SCREEN_H 720
+#define SCREEN_W 1280
+#define LOGICAL_HEIGHT 720
+#define LOGICAL_WIDTH 1280
 #define MS_PER_TICK 1000 / 60
+
 #define ARRAY_COUNT(thing) sizeof(thing) / sizeof(thing[0])
+#define ASSERT(thing) if (!(thing)) {SDL_ShowSimpleMessageBox(0,"assertion failed!",0,0); int *p; *p = 0;}
 
 typedef struct target_node {
   target_node *prev, *next;
@@ -27,8 +32,8 @@ typedef struct target_node {
 } target_node;
 
 bool32 hit_target(target_node *target, v2 pos) {
-  float dist = magnitude(target->pos - pos);
-  return dist < 5.0f;
+  f32 dist = magnitude(target->pos - pos);
+  return fabs(dist) < 2.0f;
 }
 
 typedef struct chicken_info {
@@ -46,7 +51,7 @@ enum peon_type {
 
 typedef struct peon {
   v2 pos, dir;
-  float speed;
+  f32 speed;
   struct {
     int w,h;
   } size;
@@ -56,18 +61,28 @@ typedef struct peon {
   bool32 alive;
   peon_type type;
   target_node *target; // where to walk towards
+  SDL_Texture *tex;
+  bool32 hmirror;
 } peon;
+
+typedef struct peon_stack {
+  size_t count, capacity;
+  peon *stack;
+  v2 spawner;
+  target_node *target; // some sort of default target to walk towards upon adding a peon
+} peon_stack;
 
 typedef struct drawitem {
   drawitem *next;
   SDL_Rect src, dst;
   SDL_Texture *tex;
+  bool32 hmirror;
 } drawitem;
 
-typedef struct drawitemstack {
+typedef struct drawitem_stack {
   size_t count, capacity;
   drawitem *stack;
-} drawitemstack;
+} drawitem_stack;
 
 typedef struct game_state {
   uint32_t taps;
@@ -75,12 +90,12 @@ typedef struct game_state {
   uint32_t fps;
   SDL_Renderer *sdlRenderer;
   SDL_Window *sdlWindow;
-  SDL_Texture *bg, *tower, *road, *default_peon, *isometric;
+  SDL_Texture *bg, *tower, *road, *default_peon, *isometric, *grid;
   bool32 running;
-  peon *peons[1000];
+  peon_stack peons;
   target_node *targets[3];
   int lastTargetIndex;
-  drawitemstack drawitems;
+  drawitem_stack drawitems;
   struct {
     SDL_Rect rect;
     bool32 captured;
@@ -108,6 +123,7 @@ typedef struct game_state {
     } tapbutton;
   } menu;
   uint32_t upgrades_unlocked;
+  v2 scroll;
 } game_state;
 
 void emscripten_loop_workaround(void *gs);
@@ -154,18 +170,18 @@ bool32 die() {
 
 // prepare to draw an item later. will be sorted by z before actually blitting
 // to screen
-// naive and slow
-// TODO obviously do the samn sorting at insertion time, complete DERP
-void push_drawitem(drawitemstack *d, SDL_Texture *tex, SDL_Rect *src,
+// pass a negative width in the dst rect to flip horizontally
+void push_drawitem(drawitem_stack *d, SDL_Texture *tex, SDL_Rect *src,
                    SDL_Rect *dst) {
   if (d->stack == 0) {
     d->stack = (drawitem *)malloc(1000 * sizeof(drawitem));
     d->capacity = 1000;
   }
   if (d->capacity == d->count) {
-    SDL_Log("too many items in drawitems stack! bailing to let you know. "
+    SDL_Log("too many items (1000) in drawitems stack! bailing to let you know. "
             "enjoy! :D");
     die();
+    return;
   }
   if (d->count == 0) {
     // stored as a linked list even though it's a raw n * size stack, we need to
@@ -174,6 +190,11 @@ void push_drawitem(drawitemstack *d, SDL_Texture *tex, SDL_Rect *src,
     next->dst = *dst;
     next->src = *src;
     next->tex = tex;
+    next->hmirror = false;
+    if (next->dst.w < 0) {
+    next->hmirror = true;
+    next->dst.w = -next->dst.w;
+      }
     next->next = 0;
     d->count++;
     return;
@@ -196,28 +217,44 @@ void push_drawitem(drawitemstack *d, SDL_Texture *tex, SDL_Rect *src,
       next->src = *src;
       next->tex = tex;
       next->next = best->next;
+    next->hmirror = false;
+    if (next->dst.w < 0) {
+    next->hmirror = true;
+    next->dst.w = -next->dst.w;
+      }
       best->next = next;
+
       d->count++;
       return;
     }
     // IMPORTANT(caf): we sort by y position + height because we left SDL's top-left origin coordinate system alone
     // rather than flipping y. might want to eventually flip y if we do anything much more complex than a tappy game
     // with autonomous simple peeps
-    if (dst->y+dst->h > cur->dst.y+cur->dst.h) {
+    if (dst->y > cur->dst.y) {
       best = cur;
     }
     cur = cur->next;
   }
 }
 
-void render_drawitemstack(drawitemstack *d, SDL_Renderer *renderer) {
+void render_drawitemstack(drawitem_stack *d, SDL_Renderer *renderer) {
   d->count = 0;
   drawitem *p = d->stack;
   while (p != 0) {
     SDL_Rect dst = p->dst;
-    dst.y -= p->src.h;
-    dst.x -= (p->src.w / 2);
+    // for things we care about sorting in "z"...
+    dst.y -= p->dst.h; // bottom
+    dst.x -= (p->dst.w / 2); // center
+    // // flip y axis to increase up..
+    // dst.y = LOGICAL_HEIGHT - dst.y;
+    // if (dst.h > 32) {
+    //   SDL_Log("%d, %d, %d, %d", dst.x,dst.y,dst.h,dst.w);
+    // }
+    if (p->hmirror) {
+    SDL_RenderCopyEx(renderer, p->tex, &p->src, &dst, 0, 0, SDL_FLIP_HORIZONTAL);
+  } else{
     SDL_RenderCopy(renderer, p->tex, &p->src, &dst);
+  }
     p = p->next;
   }
 }

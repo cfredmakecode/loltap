@@ -1,91 +1,87 @@
 #include "include/base.h"
 
-// where to create new ones
-// #define PEON_HOTSPOT_X 30
-// #define PEON_HOTSPOT_Y 107
-#define PEON_HOTSPOT_X 55
-#define PEON_HOTSPOT_Y 100
-
-void add_peon(game_state *gs) {
-  // if there's an empty slot, add it. otherwise oh well
-  for (int i = 0; i < ARRAY_COUNT(gs->peons); i++) {
-    if (gs->peons[i] == 0) {
-      gs->peons[i] = (peon *)malloc(sizeof(peon));
-      peon *p = gs->peons[i];
-      p->type = PEON_NORMAL;
-      gs->peons[i]->pos.x = (rand() % 12) - 6 + PEON_HOTSPOT_X;
-      gs->peons[i]->pos.y = (rand() % 8) - 4 + PEON_HOTSPOT_Y;
+// TODO? we could return the peon added so one can do things with it immediately
+// like target / move / speed / etc
+internal void add_peon(peon_stack *peons, game_state *gs) {
+  if (peons->stack == 0) {
+    peons->capacity = 1000;
+    peons->stack = (peon *)calloc(peons->capacity, sizeof(peon));
+    peons->count = 0;
+    ASSERT(gs->targets[0]);
+    peons->target = gs->targets[0];
+  }
+  ASSERT(peons->count + 1 < 1 || peons->capacity);
+  for (int i = 0; i < peons->capacity; i++) {
+    peon *p = (peon *)peons->stack + i;
+    if (!p->alive) {
+      peons->count++;
+      p->pos.x = (rand() % 12) - 6 + peons->spawner.x;
+      p->pos.y = (rand() % 8) - 4 + peons->spawner.y;
       p->speed = ((rand() % 8) * 0.1f) + 0.1f;
-
-      gs->peons[i]->size.h = 5;
-      gs->peons[i]->size.w = 5;
-      gs->peons[i]->frame = 0;
-      gs->peons[i]->which = i;
-      gs->peons[i]->alive = true;
-
-      if (p->which % 10 == 0) {
+      p->size.h = 5;
+      p->size.w = 5;
+      p->frame = 0;
+      p->which = i;
+      p->alive = true;
+      p->tex = gs->default_peon;
+      if (p->which % 22 == 0) {
         p->type = PEON_CHICKEN;
         p->size.h = 16;
         p->size.w = 16;
+        p->tex = gs->chicken.tex;
       }
-      p->target = gs->targets[(rand() % ARRAY_COUNT(gs->targets))];
+      p->target = peons->target;
       p->dir = normalize(p->target->pos - p->pos);
-
-      SDL_Log("peon at %f,%f", gs->peons[i]->pos.x, gs->peons[i]->pos.y);
+      if (p->dir.x < 0) {
+        p->hmirror = true;
+      }
+      SDL_Log("new peon at %f,%f", p->pos.x, p->pos.y);
       break;
     }
+    // if there's an empty slot, add it. otherwise oh well
   }
 }
-void tick_peons(game_state *gs) {
-  for (int i = 0; i < ARRAY_COUNT(gs->peons); i++) {
-    if (gs->peons[i] != 0) {
-      peon *p = gs->peons[i];
-      if (!gs->peons[i]->alive) {
-        SDL_Log("killed peon %d", gs->peons[i]->which);
-        free(gs->peons[i]);
-        gs->peons[i] = 0;
-        continue;
-      }
 
-      p->dir = normalize(p->target->pos - p->pos);
+internal void tick_peons(peon_stack *peons) {
+  for (int i = 0; i < peons->capacity; i++) {
+    peon *p = (peon *)peons->stack + i;
+    if (p->alive) {
       p->pos = p->pos + (p->dir * p->speed);
-
+      if (p->dir.x < 0) {
+        p->hmirror = true;
+      }
       if (hit_target(p->target, p->pos)) {
         if (p->target->next != 0) {
           p->target = p->target->next;
         }
       }
-
       if (p->ticks % 10 == 0) {
         p->frame = (p->frame + 1) % 5;
       }
-      if (gs->peons[i]->ticks % 60 == 0) {
-        // change p->target here instead
-        // gs->peons[i]->speed.x = float((rand() % 5) - 2) * 0.1;
-        // gs->peons[i]->speed.y = float((rand() % 5) - 2) * 0.1;
+      if (p->ticks % 60 == 0) { // don't change our direction too quickly
+        ASSERT(p->target != 0);
+        p->dir = normalize(p->target->pos - p->pos);
       }
-      if (gs->peons[i]->pos.x > 128 || gs->peons[i]->pos.y < 60) {
-        // gs->peons[i]->alive = false;
-      }
-      gs->peons[i]->ticks++;
+      // TODO kill peons..
+      p->ticks++;
     }
   }
 }
-void render_peons(game_state *gs) {
-  for (int i = 0; i < ARRAY_COUNT(gs->peons); i++) {
-    if (gs->peons[i] != 0) {
-      peon *p = gs->peons[i];
+
+void render_peons(peon_stack *peons, drawitem_stack *drawitems) {
+  for (int i = 0; i < peons->capacity; i++) {
+    peon *p = (peon *)peons->stack + i;
+    if (p->alive) {
       SDL_Rect src, dst;
-      src.x = gs->peons[i]->frame * 5;
-      src.y = (gs->peons[i]->which % 7) * 5;
+      src.x = p->frame * 5;
+      src.y = (p->which % 7) * 5;
       src.w = 5;
       src.h = 5;
       dst.x = int(p->pos.x);
       dst.y = int(p->pos.y);
       dst.w = 5;
       dst.h = 5;
-      // SDL_RenderCopy(gs->sdlRenderer, gs->default_peon, &src,
-      //                &gs->peons[i]->pos);
+      // TODO keep magnification per peon..
       if (p->type == PEON_CHICKEN) {
         src.x = p->frame * 16;
         src.y = 0;
@@ -93,12 +89,12 @@ void render_peons(game_state *gs) {
         src.h = 16;
         dst.w = 16;
         dst.h = 16;
-        push_drawitem(&gs->drawitems, gs->chicken.tex, &src, &dst);
-      } else {
-        push_drawitem(&gs->drawitems, gs->default_peon, &src, &dst);
       }
-      // todo handle some Z ordering with a tiny bit of sorting before blitting
-      // directly
+      ASSERT(p->tex != 0);
+      if (p->dir.x < 0) {
+        dst.w = -dst.w;
+      }
+      push_drawitem(drawitems, p->tex, &src, &dst);
     }
   }
 }

@@ -28,9 +28,9 @@ void render_text(game_state *gs, const char *text, int x, int y) {
       continue;
     }
     SDL_Rect letter = {(offset % 10) * 5, (offset / 10) * 8, 5, 8};
-    SDL_Rect pos = {x, y, 5, 8};
+    SDL_Rect pos = {x, y, 10, 16};
     SDL_RenderCopy(gs->sdlRenderer, gs->menu.font, &letter, &pos);
-    x += 5 + 2;
+    x += 10 + 2;
     l++;
   }
 }
@@ -121,4 +121,6 @@ void render_menu(game_state *gs) {
   char buf[16];
   sprintf(buf, "%u taps", gs->taps);
   render_text(gs, buf, 2, 2);
+  sprintf(buf, "%u fps", gs->fps);
+  render_text(gs, buf, 2, LOGICAL_HEIGHT - 20);
 }
