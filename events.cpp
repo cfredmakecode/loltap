@@ -72,6 +72,27 @@ void handle_events(game_state *gs) {
       gs->mouse.rect.x = e.motion.x;
       gs->mouse.rect.y = e.motion.y;
       break;
+    case SDL_MOUSEWHEEL:
+      gs->zoom += e.wheel.y;
+      if (gs->zoom < 0.5) {
+        gs->zoom = 0.5;
+      }
+      break;
+    case SDL_FINGERDOWN:
+      gs->mouse.button3 = true;
+      break;
+    case SDL_FINGERUP:
+      gs->mouse.button3 = false;
+      break;
+    case SDL_FINGERMOTION:
+      if (gs->mouse.button3) {
+        SDL_SetCursor(gs->handcursor);
+        scroll_playfield_by(gs, e.motion.xrel, e.motion.yrel);
+        break;
+      }
+      gs->mouse.rect.x = e.motion.x;
+      gs->mouse.rect.y = e.motion.y;
+      break;
     case SDL_MOUSEBUTTONDOWN:
       switch (e.button.button) {
       case SDL_BUTTON_LEFT:
@@ -91,9 +112,9 @@ void handle_events(game_state *gs) {
       case SDL_BUTTON_RIGHT:
         gs->mouse.button2 = true;
         gs->targets[gs->lastTargetIndex]->pos.x =
-            gs->mouse.rect.x - gs->scroll.x;
+            (gs->mouse.rect.x - gs->scroll.x) * 1.0f / gs->zoom;
         gs->targets[gs->lastTargetIndex]->pos.y =
-            gs->mouse.rect.y - gs->scroll.y;
+            (gs->mouse.rect.y - gs->scroll.y) * 1.0f / gs->zoom;
         int t = gs->lastTargetIndex;
         int c = ARRAY_COUNT(gs->targets);
         gs->lastTargetIndex = (t + 1) % c;
@@ -166,10 +187,19 @@ void handle_events(game_state *gs) {
         die();
         break;
       }
+      if (e.key.keysym.sym == '[') {
+        gs->zoom += 0.1f;
+        break;
+      }
+      if (e.key.keysym.sym == ']') {
+        gs->zoom -= 0.1f;
+        break;
+      }
       if (e.key.keysym.sym == 'c') {
-        printf("re-center requested\n");
+        printf("re-center/reset requested\n");
         gs->scroll.x = 0;
         gs->scroll.y = 0;
+        gs->zoom = 1.0f;
         break;
       }
       if (e.key.keysym.sym == 'a') {

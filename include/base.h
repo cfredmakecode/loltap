@@ -28,11 +28,13 @@
 #define MS_PER_TICK 1000 / 60
 
 #define ARRAY_COUNT(thing) sizeof(thing) / sizeof(thing[0])
-#define ASSERT(thing)                                                         \
-if (!(thing)) {                                                              \
-  SDL_ShowSimpleMessageBox(0,"assertion failed!",0,0);                       \
-  char *blowup = 0;                                                          \
-  *blowup = 'Y';                                                             \
+#define ASSERT(thing)                                                          \
+  \
+if(!(thing)) {                                                                 \
+    SDL_ShowSimpleMessageBox(0, "assertion failed!", 0, 0);                    \
+    char *blowup = 0;                                                          \
+    *blowup = 'Y';                                                             \
+  \
 }
 
 typedef struct target_node {
@@ -52,17 +54,13 @@ typedef struct chicken_info {
   int x, y;
 } chicken;
 
-enum peon_type {
-  PEON_NORMAL,
-  PEON_CHICKEN,
-  PEON_TYPE_COUNT
-};
+enum peon_type { PEON_NORMAL, PEON_CHICKEN, PEON_TYPE_COUNT };
 
 typedef struct peon {
   v2 pos, dir;
   f32 speed;
   struct {
-    int w,h;
+    int w, h;
   } size;
   int frame;
   int which;
@@ -78,7 +76,8 @@ typedef struct peon_stack {
   size_t count, capacity;
   peon *stack;
   v2 spawner;
-  target_node *target; // some sort of default target to walk towards upon adding a peon
+  target_node
+      *target; // some sort of default target to walk towards upon adding a peon
 } peon_stack;
 
 typedef struct drawitem {
@@ -105,6 +104,7 @@ typedef struct game_state {
   target_node *targets[3];
   int lastTargetIndex;
   drawitem_stack drawitems;
+  drawitem_stack grounditems;
   struct {
     SDL_Rect rect;
     bool32 captured;
@@ -190,8 +190,9 @@ void push_drawitem(drawitem_stack *d, SDL_Texture *tex, SDL_Rect *src,
     d->capacity = 10000;
   }
   if (d->capacity == d->count) {
-    SDL_Log("too many items (10000) in drawitems stack! bailing to let you know. "
-            "enjoy! :D");
+    SDL_Log(
+        "too many items (10000) in drawitems stack! bailing to let you know. "
+        "enjoy! :D");
     die();
     ASSERT(false);
     return;
@@ -201,13 +202,15 @@ void push_drawitem(drawitem_stack *d, SDL_Texture *tex, SDL_Rect *src,
     // access both ways to sort and draw in the desired order easily later
     drawitem *next = d->stack + d->count;
     next->dst = *dst;
-    next->src = *src;
+    if (src != 0) {
+      next->src = *src;
+    }
     next->tex = tex;
     next->hmirror = false;
     if (next->dst.w < 0) {
-    next->hmirror = true;
-    next->dst.w = -next->dst.w;
-      }
+      next->hmirror = true;
+      next->dst.w = -next->dst.w;
+    }
     next->next = 0;
     d->count++;
     return;
@@ -227,21 +230,25 @@ void push_drawitem(drawitem_stack *d, SDL_Texture *tex, SDL_Rect *src,
       // end of the line for us
       drawitem *next = d->stack + d->count;
       next->dst = *dst;
-      next->src = *src;
+      if (src != 0) {
+        next->src = *src;
+      }
       next->tex = tex;
       next->next = best->next;
-    next->hmirror = false;
-    if (next->dst.w < 0) {
-    next->hmirror = true;
-    next->dst.w = -next->dst.w;
+      next->hmirror = false;
+      if (next->dst.w < 0) {
+        next->hmirror = true;
+        next->dst.w = -next->dst.w;
       }
       best->next = next;
 
       d->count++;
       return;
     }
-    // IMPORTANT(caf): we sort by y position + height because we left SDL's top-left origin coordinate system alone
-    // rather than flipping y. might want to eventually flip y if we do anything much more complex than a tappy game
+    // IMPORTANT(caf): we sort by y position + height because we left SDL's
+    // top-left origin coordinate system alone
+    // rather than flipping y. might want to eventually flip y if we do anything
+    // much more complex than a tappy game
     // with autonomous simple peeps
     if (dst->y > cur->dst.y) {
       best = cur;
@@ -250,22 +257,27 @@ void push_drawitem(drawitem_stack *d, SDL_Texture *tex, SDL_Rect *src,
   }
 }
 
-void render_drawitemstack(drawitem_stack *d, SDL_Renderer *renderer, game_state *gs) {
+void render_drawitemstack(drawitem_stack *d, SDL_Renderer *renderer,
+                          game_state *gs) {
   d->count = 0;
   drawitem *p = d->stack;
   while (p != 0) {
     SDL_Rect dst = p->dst;
     // for things we care about sorting in "z"...
-    dst.y -= p->dst.h; // bottom
+    dst.y -= p->dst.h;       // bottom
     dst.x -= (p->dst.w / 2); // center
     // // flip y axis to increase up..
     dst.y += gs->scroll.y;
     dst.x += gs->scroll.x;
+    // apply playfield zoom...
+    dst.h *= gs->zoom;
+    dst.w *= gs->zoom;
     if (p->hmirror) {
-    SDL_RenderCopyEx(renderer, p->tex, &p->src, &dst, 0, 0, SDL_FLIP_HORIZONTAL);
-  } else{
-    SDL_RenderCopy(renderer, p->tex, &p->src, &dst);
-  }
+      SDL_RenderCopyEx(renderer, p->tex, &p->src, &dst, 0, 0,
+                       SDL_FLIP_HORIZONTAL);
+    } else {
+      SDL_RenderCopy(renderer, p->tex, &p->src, &dst);
+    }
     p = p->next;
   }
 }
@@ -275,7 +287,6 @@ struct {
   const char *name, *icon_path;
 } upgrades[] = {{2, 100, "double!", "double.png"},
                 {4, 1000, "quadruple!", "quadruple.png"}};
-
 
 void scroll_playfield_by(game_state *gs, int x, int y) {
   gs->scroll.x += x;

@@ -30,6 +30,7 @@ extern "C" int main(int argc, char **argv) {
   gs.clouds.rect.h = 128;
   gs.mouse.rect.w = 1;
   gs.mouse.rect.h = 1;
+  gs.zoom = 1.0f;
 
   gs.peons.spawner.x = rand() % 500;
   gs.peons.spawner.y = rand() % 500;
@@ -126,16 +127,16 @@ void main_loop(game_state *gs) {
   SDL_RenderClear(gs->sdlRenderer);
 
   SDL_Rect grid = {0};
-  grid.w = 64;
-  grid.h = 32;
-  int scr_y = int(gs->scroll.y) % 32;
-  int scr_x = int(gs->scroll.x) % 64;
+  grid.w = 64 * gs->zoom;
+  grid.h = 32 * gs->zoom;
+  int scr_y = int(gs->scroll.y) % grid.h;
+  int scr_x = int(gs->scroll.x) % grid.w;
   // to ensure we draw enough to go offscreen, give me another one
-  scr_y -= 32;
-  scr_x -= 64;
+  scr_y -= grid.h;
+  scr_x -= grid.w;
   // and then add another in the other direction in this loop..
-  for (grid.y = scr_y; grid.y < LOGICAL_HEIGHT + 32; grid.y += grid.h) {
-    for (grid.x = scr_x; grid.x < LOGICAL_WIDTH + 64; grid.x += grid.w) {
+  for (grid.y = scr_y; grid.y < LOGICAL_HEIGHT + grid.h; grid.y += grid.h) {
+    for (grid.x = scr_x; grid.x < LOGICAL_WIDTH + grid.w; grid.x += grid.w) {
       SDL_RenderCopy(gs->sdlRenderer, gs->grid, 0, &grid);
     }
   }
@@ -202,8 +203,12 @@ void main_loop(game_state *gs) {
     SDL_Rect temp = {0};
     temp.h = 4;
     temp.w = 4;
-    temp.x = gs->targets[i]->pos.x - 1 + gs->scroll.x;
-    temp.y = gs->targets[i]->pos.y - 1 + gs->scroll.y;
+    temp.x = gs->targets[i]->pos.x - 1;
+    temp.x *= gs->zoom;
+    temp.x += gs->scroll.x;
+    temp.y = gs->targets[i]->pos.y - 1;
+    temp.y *= gs->zoom;
+    temp.y += gs->scroll.y;
     SDL_SetRenderDrawColor(gs->sdlRenderer, 0xff, 0xff, 0xff, 0xff);
     SDL_RenderDrawRect(gs->sdlRenderer, &temp);
     temp.h = 2;
