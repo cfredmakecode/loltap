@@ -30,7 +30,7 @@ extern "C" int main(int argc, char **argv) {
   gs.clouds.rect.h = 128;
   gs.mouse.rect.w = 1;
   gs.mouse.rect.h = 1;
-  gs.zoom = 1.0f;
+  reset_camera(&gs);
 
   gs.peons.spawner.x = rand() % 500;
   gs.peons.spawner.y = rand() % 500;
@@ -53,18 +53,41 @@ extern "C" int main(int argc, char **argv) {
   // IMPORTANT(caf): this set and unset loop is a weird workaround I found
   // to shut emscripten up about a main loop when using SDL2
   emscripten_set_main_loop_arg(&emscripten_loop_workaround, (void *)&gs, 0, 0);
-#endif
-
-  SDL_CreateWindowAndRenderer(SCREEN_W, SCREEN_H, SDL_WINDOW_RESIZABLE,
+  emscripten_set_element_css_size(0, 1280, 720);
+  EmscriptenFullscreenStrategy fullscreenStrategy = {0};
+  fullscreenStrategy.scaleMode = EMSCRIPTEN_FULLSCREEN_SCALE_STRETCH;
+  fullscreenStrategy.canvasResolutionScaleMode =
+      EMSCRIPTEN_FULLSCREEN_CANVAS_SCALE_HIDEF;
+  fullscreenStrategy.filteringMode = EMSCRIPTEN_FULLSCREEN_FILTERING_BILINEAR;
+  emscripten_request_fullscreen_strategy(0, true, &fullscreenStrategy);
+  gs.camera.rect.w = 1280;
+  gs.camera.rect.h = 720;
+  SDL_CreateWindowAndRenderer(1280, 720, SDL_WINDOW_FULLSCREEN_DESKTOP,
                               &gs.sdlWindow, &gs.sdlRenderer);
+#else
+
+  SDL_CreateWindowAndRenderer(0, 0, SDL_WINDOW_FULLSCREEN_DESKTOP,
+                              &gs.sdlWindow, &gs.sdlRenderer);
+#endif
+  SDL_DisplayMode mode;
+  SDL_GetWindowDisplayMode(gs.sdlWindow, &mode);
+  gs.camera.rect.w = mode.w;
+  gs.camera.rect.h = mode.h;
+  // NOTE(caf): center the camera way away from negative coords and we avoid
+  // handling some weirdness
+  // we won't need to scroll this far ever
+  gs.camera.rect.x = 0;
+  gs.camera.rect.y = 0;
+  gs.camera.zoom = 1.0f;
+
   SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "best");
-  SDL_RenderSetLogicalSize(gs.sdlRenderer, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+// SDL_RenderSetLogicalSize(gs.sdlRenderer, LOGICAL_WIDTH, LOGICAL_HEIGHT);
 
 #ifdef __EMSCRIPTEN__
   emscripten_cancel_main_loop();
 #endif
 
-  printf("set rendering res %dx%d\n", LOGICAL_HEIGHT, LOGICAL_WIDTH);
+  // printf("set rendering res %dx%d\n", LOGICAL_HEIGHT, LOGICAL_WIDTH);
   for (int i = 0; i < ARRAY_COUNT(things_to_load); i++) {
     char buf[1024];
     sprintf(buf, "assets/%s", things_to_load[i].filename);
@@ -75,7 +98,9 @@ extern "C" int main(int argc, char **argv) {
     printf("loaded %s!\n", things_to_load[i].filename);
   }
 
-  add_peon(&gs.peons, &gs);
+  for (int i = 0; i < 50; i++) {
+    add_peon(&gs.peons, &gs);
+  }
 
   gs.handcursor = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_HAND);
   gs.arrowcursor = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW);
@@ -92,7 +117,6 @@ extern "C" int main(int argc, char **argv) {
   return 0;
 }
 
-#define HELD_DOWN_MIN_TICKS 300
 void main_loop(game_state *gs) {
   while (1) {
     uint32_t toWait = SDL_GetTicks() - gs->lastMs;
@@ -127,16 +151,17 @@ void main_loop(game_state *gs) {
   SDL_RenderClear(gs->sdlRenderer);
 
   SDL_Rect grid = {0};
-  grid.w = 64 * gs->zoom;
-  grid.h = 32 * gs->zoom;
-  int scr_y = int(gs->scroll.y) % grid.h;
-  int scr_x = int(gs->scroll.x) % grid.w;
+  grid.w = 64 * gs->camera.zoom;
+  grid.h = 32 * gs->camera.zoom;
+  int scr_y = int(gs->camera.rect.y) % grid.h;
+  int scr_x = int(gs->camera.rect.x) % grid.w;
   // to ensure we draw enough to go offscreen, give me another one
   scr_y -= grid.h;
   scr_x -= grid.w;
   // and then add another in the other direction in this loop..
-  for (grid.y = scr_y; grid.y < LOGICAL_HEIGHT + grid.h; grid.y += grid.h) {
-    for (grid.x = scr_x; grid.x < LOGICAL_WIDTH + grid.w; grid.x += grid.w) {
+  for (grid.y = scr_y; grid.y < gs->camera.rect.h + grid.h; grid.y += grid.h) {
+    for (grid.x = scr_x; grid.x < gs->camera.rect.w + grid.w;
+         grid.x += grid.w) {
       SDL_RenderCopy(gs->sdlRenderer, gs->grid, 0, &grid);
     }
   }
@@ -178,21 +203,21 @@ void main_loop(game_state *gs) {
   towerdst.w = w / 2;
   towerdst.h = h / 2;
   push_drawitem(&gs->drawitems, gs->tower, &towersrc, &towerdst);
-  remembered_var int t2x = (rand() % LOGICAL_WIDTH);
+  remembered_var int t2x = (rand() % gs->camera.rect.w);
   towerdst.x = t2x;
-  remembered_var int t2y = (rand() % LOGICAL_HEIGHT);
+  remembered_var int t2y = (rand() % gs->camera.rect.h);
   towerdst.y = t2y;
   towerdst.w = -towerdst.w;
   push_drawitem(&gs->drawitems, gs->tower, &towersrc, &towerdst);
-  remembered_var int t3x = (rand() % LOGICAL_WIDTH);
+  remembered_var int t3x = (rand() % gs->camera.rect.w);
   towerdst.x = t3x;
-  remembered_var int t3y = (rand() % LOGICAL_HEIGHT);
+  remembered_var int t3y = (rand() % gs->camera.rect.h);
   towerdst.y = t3y;
   towerdst.w = -towerdst.w;
   push_drawitem(&gs->drawitems, gs->tower, &towersrc, &towerdst);
-  remembered_var int t4x = (rand() % LOGICAL_WIDTH);
+  remembered_var int t4x = (rand() % gs->camera.rect.w);
   towerdst.x = t4x;
-  remembered_var int t4y = (rand() % LOGICAL_HEIGHT);
+  remembered_var int t4y = (rand() % gs->camera.rect.h);
   towerdst.y = t4y;
   towerdst.w = -towerdst.w;
   push_drawitem(&gs->drawitems, gs->tower, &towersrc, &towerdst);
@@ -203,12 +228,8 @@ void main_loop(game_state *gs) {
     SDL_Rect temp = {0};
     temp.h = 4;
     temp.w = 4;
-    temp.x = gs->targets[i]->pos.x - 1;
-    temp.x *= gs->zoom;
-    temp.x += gs->scroll.x;
-    temp.y = gs->targets[i]->pos.y - 1;
-    temp.y *= gs->zoom;
-    temp.y += gs->scroll.y;
+    temp.x = gs->targets[i]->pos.x - 1 + gs->camera.rect.x;
+    temp.y = gs->targets[i]->pos.y - 1 + gs->camera.rect.y;
     SDL_SetRenderDrawColor(gs->sdlRenderer, 0xff, 0xff, 0xff, 0xff);
     SDL_RenderDrawRect(gs->sdlRenderer, &temp);
     temp.h = 2;

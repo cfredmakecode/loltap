@@ -66,32 +66,38 @@ void handle_events(game_state *gs) {
     case SDL_MOUSEMOTION:
       if (gs->mouse.button3) {
         SDL_SetCursor(gs->handcursor);
-        scroll_playfield_by(gs, e.motion.xrel, e.motion.yrel);
+        move_camera_by(gs, e.motion.xrel, e.motion.yrel);
         break;
       }
       gs->mouse.rect.x = e.motion.x;
       gs->mouse.rect.y = e.motion.y;
       break;
     case SDL_MOUSEWHEEL:
-      gs->zoom += e.wheel.y;
-      if (gs->zoom < 0.5) {
-        gs->zoom = 0.5;
-      }
+      zoom_camera_by(gs, e.wheel.y);
       break;
     case SDL_FINGERDOWN:
-      gs->mouse.button3 = true;
+      gs->touch.down = true;
+      gs->touch.cur.x = e.tfinger.x * gs->camera.rect.w;
+      gs->touch.cur.y = e.tfinger.y * gs->camera.rect.h;
       break;
     case SDL_FINGERUP:
-      gs->mouse.button3 = false;
+      gs->touch.down = false;
+      gs->touch.cur.x = e.tfinger.x * gs->camera.rect.w;
+      gs->touch.cur.y = e.tfinger.y * gs->camera.rect.h;
       break;
     case SDL_FINGERMOTION:
-      if (gs->mouse.button3) {
-        SDL_SetCursor(gs->handcursor);
-        scroll_playfield_by(gs, e.motion.xrel, e.motion.yrel);
-        break;
+      v2 pos;
+      pos.x = e.tfinger.x * gs->camera.rect.w;
+      pos.y = e.tfinger.y * gs->camera.rect.h;
+      gs->touch.rel.x = gs->touch.cur.x - pos.x;
+      gs->touch.rel.y = gs->touch.cur.y - pos.y;
+      gs->touch.cur.x = pos.x;
+      gs->touch.cur.y = pos.y;
+      if (gs->touch.down) {
+        move_camera_by(gs, -gs->touch.rel.x, -gs->touch.rel.y);
+        gs->touch.rel.x = 0;
+        gs->touch.rel.y = 0;
       }
-      gs->mouse.rect.x = e.motion.x;
-      gs->mouse.rect.y = e.motion.y;
       break;
     case SDL_MOUSEBUTTONDOWN:
       switch (e.button.button) {
@@ -111,17 +117,12 @@ void handle_events(game_state *gs) {
         break;
       case SDL_BUTTON_RIGHT:
         gs->mouse.button2 = true;
-        gs->targets[gs->lastTargetIndex]->pos.x =
-            (gs->mouse.rect.x - gs->scroll.x) * 1.0f / gs->zoom;
-        gs->targets[gs->lastTargetIndex]->pos.y =
-            (gs->mouse.rect.y - gs->scroll.y) * 1.0f / gs->zoom;
+        target_node *target = gs->targets[gs->lastTargetIndex];
+        target->pos.x = gs->mouse.rect.x - gs->camera.rect.x;
+        target->pos.y = gs->mouse.rect.y - gs->camera.rect.y;
         int t = gs->lastTargetIndex;
         int c = ARRAY_COUNT(gs->targets);
         gs->lastTargetIndex = (t + 1) % c;
-        // gs->lastTargetIndex =
-        //     (gs->lastTargetIndex + 1) % ARRAY_COUNT(gs->targets);
-        // gs->lastTargetIndex =
-        //     (gs->lastTargetIndex + 1) % ARRAY_COUNT(gs->targets);
         break;
       }
       break;
@@ -150,19 +151,15 @@ void handle_events(game_state *gs) {
       switch (e.key.keysym.sym) {
       case SDLK_UP:
         gs->pad.up = true;
-        gs->scroll.y--;
         break;
       case SDLK_DOWN:
         gs->pad.down = true;
-        gs->scroll.y++;
         break;
       case SDLK_LEFT:
         gs->pad.left = true;
-        gs->scroll.x--;
         break;
       case SDLK_RIGHT:
         gs->pad.right = true;
-        gs->scroll.x++;
         break;
       }
       break;
@@ -188,18 +185,16 @@ void handle_events(game_state *gs) {
         break;
       }
       if (e.key.keysym.sym == '[') {
-        gs->zoom += 0.1f;
+        zoom_camera_by(gs, 0.1f);
         break;
       }
       if (e.key.keysym.sym == ']') {
-        gs->zoom -= 0.1f;
+        zoom_camera_by(gs, -0.1f);
         break;
       }
       if (e.key.keysym.sym == 'c') {
         printf("re-center/reset requested\n");
-        gs->scroll.x = 0;
-        gs->scroll.y = 0;
-        gs->zoom = 1.0f;
+        reset_camera(gs);
         break;
       }
       if (e.key.keysym.sym == 'a') {

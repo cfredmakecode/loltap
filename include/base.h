@@ -10,6 +10,7 @@
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
+#include <html5.h>
 #endif
 
 #define bool32 int32_t
@@ -17,15 +18,13 @@
 #define internal static
 #define remembered_var static
 
-#define SCREEN_H 720
-#define SCREEN_W 1280
-#define LOGICAL_HEIGHT 720
-#define LOGICAL_WIDTH 1280
-#define MAX_SCROLL_X 1000
-#define MAX_SCROLL_Y 1000
-#define MIN_SCROLL_X -1000
-#define MIN_SCROLL_Y -1000
+#define MAX_CAMERA_X 100
+#define MAX_CAMERA_Y 100
+#define MIN_CAMERA_X -100
+#define MIN_CAMERA_Y -100
 #define MS_PER_TICK 1000 / 60
+
+#define HELD_DOWN_MIN_TICKS 300 // delay before awarding auto taps/clicks
 
 #define ARRAY_COUNT(thing) sizeof(thing) / sizeof(thing[0])
 #define ASSERT(thing)                                                          \
@@ -93,6 +92,10 @@ typedef struct drawitem_stack {
 } drawitem_stack;
 
 typedef struct game_state {
+  struct {
+    SDL_Rect rect;
+    f32 zoom;
+  } camera;
   uint32_t taps;
   uint32_t ticks;
   uint32_t fps;
@@ -112,6 +115,10 @@ typedef struct game_state {
     bool32 button1, button2, button3;
     uint32_t timestamp;
   } mouse;
+  struct {
+    bool32 down;
+    v2 cur, rel;
+  } touch;
   int frames;
   uint32_t lastMs;
   uint32_t lastFPSstamp;
@@ -132,8 +139,6 @@ typedef struct game_state {
     } tapbutton;
   } menu;
   uint32_t upgrades_unlocked;
-  v2 scroll;
-  f32 zoom;
   SDL_Cursor *handcursor;
   SDL_Cursor *arrowcursor;
 } game_state;
@@ -266,12 +271,13 @@ void render_drawitemstack(drawitem_stack *d, SDL_Renderer *renderer,
     // for things we care about sorting in "z"...
     dst.y -= p->dst.h;       // bottom
     dst.x -= (p->dst.w / 2); // center
-    // // flip y axis to increase up..
-    dst.y += gs->scroll.y;
-    dst.x += gs->scroll.x;
+    dst.y += gs->camera.rect.y;
+    dst.x += gs->camera.rect.x;
     // apply playfield zoom...
-    dst.h *= gs->zoom;
-    dst.w *= gs->zoom;
+    // dst.h *= gs->camera.zoom;
+    // dst.w *= gs->camera.zoom;
+    // TODO(caf): pull out render copy into something which obeys scrolling,
+    // camera zoom, etc automatically..
     if (p->hmirror) {
       SDL_RenderCopyEx(renderer, p->tex, &p->src, &dst, 0, 0,
                        SDL_FLIP_HORIZONTAL);
@@ -288,20 +294,47 @@ struct {
 } upgrades[] = {{2, 100, "double!", "double.png"},
                 {4, 1000, "quadruple!", "quadruple.png"}};
 
-void scroll_playfield_by(game_state *gs, int x, int y) {
-  gs->scroll.x += x;
-  gs->scroll.y += y;
-  if (gs->scroll.x > MAX_SCROLL_X) {
-    gs->scroll.x = MAX_SCROLL_X;
+internal void move_camera_by(game_state *gs, f32 x, f32 y) {
+  gs->camera.rect.x += x;
+  gs->camera.rect.y += y;
+  if (gs->camera.rect.x > MAX_CAMERA_X) {
+    gs->camera.rect.x = MAX_CAMERA_X;
   }
-  if (gs->scroll.y > MAX_SCROLL_Y) {
-    gs->scroll.y = MAX_SCROLL_Y;
+  if (gs->camera.rect.y > MAX_CAMERA_Y) {
+    gs->camera.rect.y = MAX_CAMERA_Y;
   }
-  if (gs->scroll.x < MIN_SCROLL_X) {
-    gs->scroll.x = MIN_SCROLL_X;
+  if (gs->camera.rect.x < MIN_CAMERA_X) {
+    gs->camera.rect.x = MIN_CAMERA_X;
   }
-  if (gs->scroll.y < MIN_SCROLL_Y) {
-    gs->scroll.y = MIN_SCROLL_Y;
+  if (gs->camera.rect.y < MIN_CAMERA_Y) {
+    gs->camera.rect.y = MIN_CAMERA_Y;
   }
 }
+
+internal void zoom_camera_by(game_state *gs, f32 amount) {
+  gs->camera.zoom += amount;
+  if (gs->camera.zoom < 0.1f) {
+    gs->camera.zoom = 0.1f;
+  }
+  if (gs->camera.zoom > 2.0f) {
+    gs->camera.zoom = 2.0f;
+  }
+}
+
+// convert coordinates in screen space to game coords
+inline internal v2 deletemecamera_to_playfield(game_state *gs, f32 x, f32 y) {
+  v2 result;
+  // result.x = (gs->camera.rect.x) * (1 / gs->camera.zoom) - x;
+  // result.y = (gs->camera.rect.y) * (1 / gs->camera.zoom) - y;
+  result.x = (gs->camera.rect.x) - x;
+  result.y = (gs->camera.rect.y) - y;
+  return result;
+}
+
+internal void reset_camera(game_state *gs) {
+  gs->camera.rect.x = 0;
+  gs->camera.rect.y = 0;
+  gs->camera.zoom = 1.0f;
+}
+
 #endif

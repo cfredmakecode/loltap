@@ -122,7 +122,7 @@ void render_menu(game_state *gs) {
   sprintf(buf, "%u taps", gs->taps);
   render_text(gs, buf, 2, 2);
   sprintf(buf, "%u fps", gs->fps);
-  render_text(gs, buf, 2, LOGICAL_HEIGHT - 20);
+  render_text(gs, buf, 2, gs->camera.rect.h - 20);
   sprintf(buf, "%u peons", gs->peons.count);
-  render_text(gs, buf, 2, LOGICAL_HEIGHT - 40);
+  render_text(gs, buf, 2, gs->camera.rect.h - 40);
 }
