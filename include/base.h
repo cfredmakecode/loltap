@@ -16,6 +16,8 @@
 #define internal static
 #define remembered_var static
 
+f32 tempZoom = 1.0f;
+
 #define MAX_CAMERA_X 100
 #define MAX_CAMERA_Y 100
 #define MIN_CAMERA_X -100
@@ -66,17 +68,18 @@ bool32 die() {
 
 void render_rect(game_state *gs, int x, int y, int w, int h) {
   SDL_Rect r;
-  r.w = w;
-  r.h = h;
-  r.x = x - gs->camera.rect.x;
-  r.y = (gs->camera.rect.h - 1) - r.h - gs->camera.rect.y - y;
+  r.w = w * (gs->camera.zoom);
+  r.h = h * (gs->camera.zoom);
+  r.x = (x - gs->camera.rect.x);
+  r.y = ((gs->camera.rect.h - 1) - r.h - gs->camera.rect.y - y);
   SDL_RenderFillRect(gs->sdlRenderer, &r);
 }
 
 static inline v2 screen_coords_to_playfield(game_state *gs, f32 x, f32 y) {
   v2 result;
-  result.x = gs->camera.rect.x + x;
-  result.y = (gs->camera.rect.h - 1) - y - gs->camera.rect.y;
+  result.x = gs->camera.rect.x + x * (1 / gs->camera.zoom);
+  result.y = (gs->camera.rect.h - 1) - (y * (1 / gs->camera.zoom)) -
+             (gs->camera.rect.y);
   return result;
 }
 

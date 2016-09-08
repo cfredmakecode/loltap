@@ -19,6 +19,7 @@ extern "C" int main(int argc, char **argv) {
 #endif
   SDL_CreateWindowAndRenderer(1280, 720, SDL_WINDOW_RESIZABLE, &gs.sdlWindow,
                               &gs.sdlRenderer);
+  SDL_MaximizeWindow(gs.sdlWindow);
   SDL_DisplayMode mode;
   SDL_GetWindowDisplayMode(gs.sdlWindow, &mode);
   gs.camera.rect.w = mode.w;
@@ -78,6 +79,7 @@ void main_loop(game_state *gs) {
   SDL_SetRenderDrawColor(gs->sdlRenderer, 20, 20, 40, 240);
   SDL_RenderFillRect(gs->sdlRenderer, &gs->mouse.rect);
 
+  SDL_RenderSetScale(gs->sdlRenderer, gs->camera.zoom, gs->camera.zoom);
   for (int i = 0; i < ARRAY_COUNT(pts.points); i++) {
     SDL_Rect rect;
     rect.w = 10;
@@ -92,6 +94,7 @@ void main_loop(game_state *gs) {
     rect.y = gs->camera.rect.h - pts.points[i].y + (rect.h) - gs->camera.rect.y;
     SDL_RenderFillRect(gs->sdlRenderer, &rect);
   }
+  SDL_RenderSetScale(gs->sdlRenderer, 1.0f, 1.0f);
 
   //
   // grid
@@ -154,10 +157,13 @@ void main_loop(game_state *gs) {
   //
   //
 
+  SDL_RenderSetScale(gs->sdlRenderer, gs->camera.zoom, gs->camera.zoom);
   render_rect(gs, 100, 100, 20, 20);
   render_rect(gs, 200, 200, 100, 100);
+  SDL_RenderSetScale(gs->sdlRenderer, 1.0f, 1.0f);
 
   SDL_RenderPresent(gs->sdlRenderer);
+
   gs->frames++;
   if (SDL_GetTicks() - gs->lastFPSstamp > 1000) {
     gs->fps = gs->frames;
