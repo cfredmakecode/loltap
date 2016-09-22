@@ -9,6 +9,13 @@ v2 operator+(v2 uno, v2 dos) {
   return result;
 }
 
+v2 operator+(v2 uno, float dos) {
+  v2 result = uno;
+  result.x += dos;
+  result.y += dos;
+  return result;
+}
+
 v2 operator-(v2 uno, v2 dos) {
   v2 result = {0, 0};
   result.x = uno.x - dos.x;
@@ -16,10 +23,24 @@ v2 operator-(v2 uno, v2 dos) {
   return result;
 }
 
+v2 operator*(v2 uno, v2 dos) {
+  v2 result = {0, 0};
+  result.x = uno.x * dos.x;
+  result.y = uno.y * dos.y;
+  return result;
+}
+
 v2 operator*(v2 uno, float dos) {
   v2 result = {0, 0};
   result.x = uno.x * dos;
   result.y = uno.y * dos;
+  return result;
+}
+
+v2 operator/(v2 uno, v2 dos) {
+  v2 result = {0, 0};
+  result.x = uno.x / dos.x;
+  result.y = uno.y / dos.y;
   return result;
 }
 

@@ -16,12 +16,6 @@
 #define internal static
 #define remembered_var static
 
-f32 tempZoom = 1.0f;
-
-#define MAX_CAMERA_X 100
-#define MAX_CAMERA_Y 100
-#define MIN_CAMERA_X -100
-#define MIN_CAMERA_Y -100
 #define MS_PER_TICK 1000 / 60
 
 #define HELD_DOWN_MIN_TICKS 300 // delay before awarding auto taps/clicks
@@ -36,11 +30,14 @@ if(!(thing)) {                                                                 \
   \
 }
 
+typedef struct camera_info {
+  v2 pos;
+  f32 screenw, screenh;
+  f32 scale;
+} camera_info;
+
 typedef struct game_state {
-  struct {
-    SDL_Rect rect;
-    f32 zoom;
-  } camera;
+  camera_info camera;
   uint32_t ticks;
   uint32_t fps;
   SDL_Renderer *sdlRenderer;
@@ -66,24 +63,71 @@ bool32 die() {
   return false;
 }
 
-void render_rect(game_state *gs, int x, int y, int w, int h) {
-  SDL_Rect r;
-  r.w = w * (gs->camera.zoom);
-  r.h = h * (gs->camera.zoom);
-  r.x = (x - gs->camera.rect.x);
-  r.y = ((gs->camera.rect.h - 1) - r.h - gs->camera.rect.y - y);
-  SDL_RenderFillRect(gs->sdlRenderer, &r);
+internal v2 s2w(camera_info *c, f32 x, f32 y) {
+  v2 pos;
+  pos.x = x * 1 / c->scale;
+  pos.y = y * 1 / c->scale;
+  pos.x -= c->pos.x * 1 / c->scale;
+  pos.y -= c->pos.y * 1 / c->scale;
+  return pos;
+}
+internal v2 w2s(camera_info *c, f32 x, f32 y) {
+  v2 pos;
+  pos.x = x * c->scale;
+  pos.y = y * c->scale;
+  pos.x += c->pos.x;
+  pos.y += c->pos.y;
+  return pos;
 }
 
-static inline v2 screen_coords_to_playfield(game_state *gs, f32 x, f32 y) {
-  v2 result;
-  result.x = gs->camera.rect.x + x * (1 / gs->camera.zoom);
-  result.y = (gs->camera.rect.h - 1) - (y * (1 / gs->camera.zoom)) -
-             (gs->camera.rect.y);
-  return result;
+internal v2 camera_center2w(camera_info *c) {
+  return s2w(c, c->screenw / 2, c->screenh / 2);
 }
 
-typedef struct blah { v2 points[10]; } blah;
-
-blah pts = {0};
+// internal v2 s2w(camera_info *c, f32 x, f32 y) {
+//   v2 result;
+//   v2 pos = {x, y};
+//   v2 view;
+//   v2 viewcenter;
+//   v2 screencenter;
+//
+//   screencenter.x = (c->screenw / 2.0f);
+//   screencenter.y = (c->screenh / 2.0f);
+//   v2 sray = screencenter - pos;
+//
+//   viewcenter.x = (c->rect.w / 2.0f);
+//   viewcenter.y = (c->rect.h / 2.0f);
+//   v2 vrelativepos;
+//   vrelativepos = pos / screencenter;
+//   view = viewcenter + (sray * vrelativepos);
+//
+//   result.x = view.x + c->rect.x;
+//   result.y = view.y + c->rect.y;
+//   return result;
+// }
+//
+// internal v2 w2s(camera_info *c, f32 x, f32 y) {
+//   v2 result;
+//   v2 pos = {x, y};
+//   v2 view;
+//   v2 viewcenter;
+//   v2 screencenter;
+//
+//   screencenter.x = (c->screenw / 2.0f);
+//   screencenter.y = (c->screenh / 2.0f);
+//
+//   viewcenter.x = (c->rect.w / 2.0f);
+//   viewcenter.y = (c->rect.h / 2.0f);
+//
+//   view.x = pos.x - c->rect.x; // - viewcenter.x;
+//   view.y = pos.y - c->rect.y; // - viewcenter.y;
+//   v2 vray = viewcenter - view;
+//
+//   f32 srelativepos;
+//   srelativepos = view.x / viewcenter.x;
+//
+//   result.x = c->rect.x + screencenter.x * srelativepos;
+//   result.y = c->rect.y + screencenter.y * srelativepos;
+//   return result;
+// }
 #endif

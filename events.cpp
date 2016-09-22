@@ -1,6 +1,7 @@
 #include "include/base.h"
 
 void handle_events(game_state *gs) {
+  f32 amount;
   SDL_Event e;
   while (SDL_PollEvent(&e)) {
     switch (e.type) {
@@ -10,8 +11,8 @@ void handle_events(game_state *gs) {
       case SDL_WINDOWEVENT_SIZE_CHANGED:
         SDL_Log("Window %d size changed to %dx%d", e.window.windowID,
                 e.window.data1, e.window.data2);
-        gs->camera.rect.w = e.window.data1;
-        gs->camera.rect.h = e.window.data2;
+        gs->camera.screenw = f32(e.window.data1);
+        gs->camera.screenh = f32(e.window.data2);
         break;
       default:
         SDL_Log("Window %d got unknown event %d", e.window.windowID,
@@ -33,19 +34,19 @@ void handle_events(game_state *gs) {
         // guess
         break;
       }
-      gs->camera.zoom -= e.wheel.y < 0 ? 0.1f : -0.1f;
+      if (e.wheel.y < 0) {
+        gs->camera.scale /= 1.1f;
+      } else {
+        gs->camera.scale *= 1.1f;
+      }
       printf("mouse wheel y:%d\n", e.wheel.y);
       break;
     case SDL_MOUSEMOTION:
       gs->mouse.rect.x = e.motion.x;
       gs->mouse.rect.y = e.motion.y;
       if (gs->mouse.button1) {
-        // TODO(caf): zoom centered around mouse x/y or pinch x/y
-        gs->camera.rect.x -= (e.motion.xrel * (1 / gs->camera.zoom));
-        gs->camera.rect.y -= (e.motion.yrel * (1 / gs->camera.zoom));
-        // this is close but still "loses" steps when moving while zoomed in.
-        // might be OK if we don't care precisely how zoomed in camera moves
-        // specifically works
+        gs->camera.pos.x += e.motion.xrel;
+        gs->camera.pos.y += e.motion.yrel;
       }
       break;
     case SDL_MOUSEBUTTONDOWN:
@@ -53,14 +54,16 @@ void handle_events(game_state *gs) {
       case SDL_BUTTON_LEFT:
         gs->mouse.button1 = true;
         break;
-      case SDL_BUTTON_RIGHT:
-        v2 t =
-            screen_coords_to_playfield(gs, gs->mouse.rect.x, gs->mouse.rect.y);
-        static int i = 0;
-        pts.points[i].x = t.x;
-        pts.points[i].y = t.y;
-        i = (i + 1) % 10;
-        break;
+      case SDL_BUTTON_RIGHT: {
+        v2 t = s2w(&gs->camera, gs->mouse.rect.x, gs->mouse.rect.y);
+        SDL_Log("rightclick: screen %d,%d world %2.2f,%2.2f", gs->mouse.rect.x,
+                gs->mouse.rect.y, t.x, t.y);
+        v2 s = w2s(&gs->camera, t.x, t.y);
+        SDL_Log("reversed  : world %2.2f,%2.2f screen %2.2f,%2.2f", t.x, t.y,
+                s.x, s.y);
+        t = camera_center2w(&gs->camera);
+        SDL_Log("camera centered on world %2.2f,%2.2f", t.x, t.y);
+      } break;
       }
       break;
     case SDL_MOUSEBUTTONUP:
@@ -85,30 +88,26 @@ void handle_events(game_state *gs) {
         break;
       }
       if (e.key.keysym.sym == '[') {
-        gs->camera.zoom -= 0.1f;
+        gs->camera.scale /= 1.1f;
         break;
       }
       if (e.key.keysym.sym == ']') {
-        gs->camera.zoom += 0.1f;
+        gs->camera.scale *= 1.1f;
         break;
       }
       if (e.key.keysym.sym == 'z') {
-        gs->camera.zoom = 1.0f;
         break;
       }
       if (e.key.keysym.sym == 'd') {
-        printf("camera: %d,%d %dx%d zoom: %f\n", gs->camera.rect.x,
-               gs->camera.rect.y, gs->camera.rect.h, gs->camera.rect.w,
-               gs->camera.zoom);
         break;
       }
       if (e.key.keysym.sym == 'c') {
         printf("re-center/reset requested\n");
-        gs->camera.rect.x = 0;
-        gs->camera.rect.y = 0;
-        gs->camera.zoom = 1.0f;
-        SDL_WarpMouseInWindow(gs->sdlWindow, gs->camera.rect.w / 2,
-                              gs->camera.rect.h / 2);
+        gs->camera.scale = 1.0f;
+        gs->camera.pos.x = 0.0f;
+        gs->camera.pos.y = 0.0f;
+        SDL_WarpMouseInWindow(gs->sdlWindow, gs->camera.screenw / 2,
+                              gs->camera.screenh / 2);
         break;
       }
       if (e.key.keysym.sym == SDLK_f) {
@@ -116,9 +115,8 @@ void handle_events(game_state *gs) {
         if (fullscreen) {
           SDL_SetWindowFullscreen(gs->sdlWindow, 0);
           SDL_SetWindowSize(gs->sdlWindow, 1280, 720);
-          gs->camera.rect.w = 1280;
-          gs->camera.rect.w = 720;
-          gs->camera.zoom = 1.0f;
+          gs->camera.screenw = 1280;
+          gs->camera.screenh = 720;
         } else {
           SDL_SetWindowFullscreen(gs->sdlWindow, SDL_WINDOW_FULLSCREEN_DESKTOP);
         }

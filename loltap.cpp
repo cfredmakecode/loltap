@@ -3,6 +3,8 @@
 #include "events.cpp"
 #include "math.h"
 
+SDL_Texture *huge_image;
+
 #undef main // to shut up winders
 
 extern "C" int main(int argc, char **argv) {
@@ -10,33 +12,41 @@ extern "C" int main(int argc, char **argv) {
   gs.running = 1;
   gs.lastMs = SDL_GetTicks();
   gs.lastFPSstamp = gs.lastMs;
-
 #ifdef __EMSCRIPTEN__
   // IMPORTANT(caf): this set and unset loop is a weird workaround I found
   // to shut emscripten up about a main loop when using SDL2
   emscripten_set_element_css_size(0, 1280, 720);
   emscripten_set_main_loop_arg(&emscripten_loop_workaround, (void *)&gs, 0, 0);
 #endif
-  SDL_CreateWindowAndRenderer(1280, 720, SDL_WINDOW_RESIZABLE, &gs.sdlWindow,
-                              &gs.sdlRenderer);
+  SDL_CreateWindowAndRenderer(1280, 720,
+                              SDL_WINDOW_RESIZABLE | SDL_WINDOW_MAXIMIZED,
+                              &gs.sdlWindow, &gs.sdlRenderer);
   SDL_MaximizeWindow(gs.sdlWindow);
   SDL_DisplayMode mode;
   SDL_GetWindowDisplayMode(gs.sdlWindow, &mode);
-  gs.camera.rect.w = mode.w;
-  gs.camera.rect.h = mode.h;
-  // NOTE(caf): center the camera way away from negative coords and we avoid
-  // handling some weirdness
-  // we won't need to scroll this far ever
-  gs.camera.rect.x = 0;
-  gs.camera.rect.y = 0;
-  gs.camera.zoom = 1.0f;
+  int w, h;
+  SDL_GetWindowSize(gs.sdlWindow, &w, &h);
+  gs.camera.screenw = w;
+  gs.camera.screenh = h;
+  gs.camera.scale = 1.0f;
+
+  SDL_Surface *s = SDL_LoadBMP("assets/huge_image.bmp");
+  if (s == 0) {
+    SDL_ShowSimpleMessageBox(0, "couldn't load huge_image.bmp!",
+                             "couldn't load huge_image.bmp!", gs.sdlWindow);
+    die();
+    return 2;
+  }
+  huge_image = SDL_CreateTextureFromSurface(gs.sdlRenderer, s);
+  if (huge_image == 0) {
+    SDL_ShowSimpleMessageBox(0, "couldn't convert huge_image.bmp!",
+                             "couldn't convert huge_image.bmp!", gs.sdlWindow);
+    die();
+    return 2;
+  }
+  SDL_FreeSurface(s);
 
   SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "best");
-
-  for (int i = 0; i < ARRAY_COUNT(pts.points); i++) {
-    pts.points[i].x = i * 100;
-    pts.points[i].y = i * 100;
-  }
 
 #ifdef __EMSCRIPTEN__
   emscripten_cancel_main_loop();
@@ -74,100 +84,50 @@ void main_loop(game_state *gs) {
   /// todo handle having to step multiple ticks because fps got behind
   handle_events(gs);
 
-  SDL_SetRenderDrawColor(gs->sdlRenderer, 0x49, 0x60, 0x0, 0xff);
+  SDL_RenderSetScale(gs->sdlRenderer, 1.0, 1.0);
+  SDL_SetRenderDrawColor(gs->sdlRenderer, 0x00, 0x00, 0x00, 0xff);
   SDL_RenderClear(gs->sdlRenderer);
-  SDL_SetRenderDrawColor(gs->sdlRenderer, 20, 20, 40, 240);
-  SDL_RenderFillRect(gs->sdlRenderer, &gs->mouse.rect);
+  SDL_SetRenderDrawBlendMode(gs->sdlRenderer, SDL_BLENDMODE_BLEND);
 
-  SDL_RenderSetScale(gs->sdlRenderer, gs->camera.zoom, gs->camera.zoom);
-  for (int i = 0; i < ARRAY_COUNT(pts.points); i++) {
-    SDL_Rect rect;
-    rect.w = 10;
-    rect.h = 10;
-    rect.x = pts.points[i].x;
-    rect.y = pts.points[i].y;
-    SDL_SetRenderDrawColor(gs->sdlRenderer, rect.x + gs->ticks % 255,
-                           rect.y + gs->ticks % 255, rect.x % 255, 255);
-    render_rect(gs, rect.x, rect.y, rect.w, rect.h);
-    continue;
-    rect.x = pts.points[i].x - gs->camera.rect.x;
-    rect.y = gs->camera.rect.h - pts.points[i].y + (rect.h) - gs->camera.rect.y;
-    SDL_RenderFillRect(gs->sdlRenderer, &rect);
-  }
-  SDL_RenderSetScale(gs->sdlRenderer, 1.0f, 1.0f);
+  SDL_Rect r = {0, 0, 3761, 4833};
+  // always scale everything first always.
+  v2 t = w2s(&gs->camera, r.x, r.y);
+  r.x = t.x;
+  r.y = t.y;
 
-  //
-  // grid
-  SDL_SetRenderDrawColor(gs->sdlRenderer, 0, 0, 0, 100);
-  for (int y = 0; y < gs->camera.rect.h; y += 10) {
-    SDL_RenderDrawLine(gs->sdlRenderer, 0, y, gs->camera.rect.w, y);
-  }
-  for (int x = 0; x < gs->camera.rect.w; x += 10) {
-    SDL_RenderDrawLine(gs->sdlRenderer, x, 0, x, gs->camera.rect.h);
-  }
-  SDL_SetRenderDrawColor(gs->sdlRenderer, 0, 70, 35, 180);
-  for (int y = 0; y < gs->camera.rect.h; y += 100) {
-    SDL_RenderDrawLine(gs->sdlRenderer, 0, y, gs->camera.rect.w, y);
-  }
-  for (int x = 0; x < gs->camera.rect.w; x += 100) {
-    SDL_RenderDrawLine(gs->sdlRenderer, x, 0, x, gs->camera.rect.h);
-  }
-  //
-  //
+  r.w *= gs->camera.scale;
+  r.h *= gs->camera.scale;
 
-  //
-  // points
-  SDL_SetRenderDrawColor(gs->sdlRenderer, 0xff, 0, 0, 0xff);
-  SDL_Rect r;
-  r.w = 3;
-  r.h = 3;
-  r.x = -1;
-  r.y = -1;
-  SDL_RenderFillRect(gs->sdlRenderer, &r);
-  r.x = -1;
-  r.y = gs->camera.rect.h - 2;
-  SDL_RenderFillRect(gs->sdlRenderer, &r);
-  r.x = gs->camera.rect.w - 2;
-  r.y = -1;
-  SDL_RenderFillRect(gs->sdlRenderer, &r);
-  r.x = gs->camera.rect.w - 2;
-  r.y = gs->camera.rect.h - 2;
-  SDL_RenderFillRect(gs->sdlRenderer, &r);
-  r.x = (gs->camera.rect.w / 2) - 1;
-  r.y = (gs->camera.rect.h / 2) - 1;
-  SDL_RenderFillRect(gs->sdlRenderer, &r);
-  SDL_SetRenderDrawColor(gs->sdlRenderer, 0xff, 0xff, 0xff, 0xff);
-  r.w = 1;
-  r.h = 1;
-  r.x = 0;
-  r.y = 0;
-  SDL_RenderDrawPoint(gs->sdlRenderer, r.x, r.y);
-  r.x = 0;
-  r.y = gs->camera.rect.h - 1;
-  SDL_RenderDrawPoint(gs->sdlRenderer, r.x, r.y);
-  r.x = gs->camera.rect.w - 1;
-  r.y = 0;
-  SDL_RenderDrawPoint(gs->sdlRenderer, r.x, r.y);
-  r.x = gs->camera.rect.w - 1;
-  r.y = gs->camera.rect.h - 1;
-  SDL_RenderDrawPoint(gs->sdlRenderer, r.x, r.y);
-  r.x = (gs->camera.rect.w / 2);
-  r.y = (gs->camera.rect.h / 2);
-  SDL_RenderDrawPoint(gs->sdlRenderer, r.x, r.y);
-  //
-  //
+  SDL_RenderCopy(gs->sdlRenderer, huge_image, 0, &r);
 
-  SDL_RenderSetScale(gs->sdlRenderer, gs->camera.zoom, gs->camera.zoom);
-  render_rect(gs, 100, 100, 20, 20);
-  render_rect(gs, 200, 200, 100, 100);
-  SDL_RenderSetScale(gs->sdlRenderer, 1.0f, 1.0f);
+  r.w = 100;
+  r.h = 100;
+  t = s2w(&gs->camera, gs->mouse.rect.x, gs->mouse.rect.y);
+  r.x = t.x;
+  r.y = t.y;
+  t = w2s(&gs->camera, r.x, r.y);
+  r.x = t.x - (r.w / 2);
+  r.y = t.y - (r.h / 2);
+  SDL_SetRenderDrawColor(gs->sdlRenderer, 0xff, 0x00, 0x00, 0x44);
+  SDL_RenderFillRect(gs->sdlRenderer, &r);
+
+  r.w = 10;
+  r.h = 10;
+  t = s2w(&gs->camera, gs->mouse.rect.x, gs->mouse.rect.y);
+  r.x = t.x;
+  r.y = t.y;
+  t = w2s(&gs->camera, r.x, r.y);
+  r.x = t.x - (r.w / 2);
+  r.y = t.y - (r.h / 2);
+  SDL_SetRenderDrawColor(gs->sdlRenderer, 0xff, 0x00, 0x00, 0xff);
+  SDL_RenderFillRect(gs->sdlRenderer, &r);
 
   SDL_RenderPresent(gs->sdlRenderer);
 
   gs->frames++;
   if (SDL_GetTicks() - gs->lastFPSstamp > 1000) {
     gs->fps = gs->frames;
-    SDL_Log("%d fps", gs->fps);
+    // SDL_Log("%d fps", gs->fps);
     gs->frames = 0;
     gs->lastFPSstamp = SDL_GetTicks();
   }
