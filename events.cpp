@@ -34,10 +34,20 @@ void handle_events(game_state *gs) {
         // guess
         break;
       }
-      if (e.wheel.y < 0) {
-        gs->camera.scale /= 1.1f;
-      } else {
-        gs->camera.scale *= 1.1f;
+      {
+        v2 before = s2w(&gs->camera, gs->mouse.rect.x, gs->mouse.rect.y);
+        if (e.wheel.y < 0) {
+          gs->camera.scale /= 1.1f;
+        } else {
+          gs->camera.scale *= 1.1f;
+        }
+        v2 after = s2w(&gs->camera, gs->mouse.rect.x, gs->mouse.rect.y);
+        v2 diff = after - before;
+        diff.x *= gs->camera.scale;
+        diff.y *= gs->camera.scale;
+        gs->camera.pos = gs->camera.pos + diff;
+        SDL_Log("before %2.2f,%2.2f after %2.2f, %2.2f diff %2.2f,%2.2f",
+                before.x, before.y, after.x, after.y, diff.x, diff.y);
       }
       printf("mouse wheel y:%d\n", e.wheel.y);
       break;
