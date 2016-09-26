@@ -29,6 +29,7 @@ extern "C" int main(int argc, char **argv) {
   gs.camera.screenw = w;
   gs.camera.screenh = h;
   gs.camera.scale = 1.0f;
+  gs.camera.targetscale = 1.0f;
 
   SDL_Surface *s = SDL_LoadBMP("assets/huge_image.bmp");
   if (s == 0) {
@@ -126,6 +127,8 @@ void main_loop(game_state *gs) {
 
   t = s2w(&gs->camera, gs->mouse.rect.x, gs->mouse.rect.y);
   render_rect(gs, t.x, t.y, 10, 10, 5, 5, 0xff, uint8_t(t.x), 0, 0xff);
+
+  render_rect(gs, 0, 0, 100, 100, 50, 50, 0xff, uint8_t(t.x), 0, 0xff);
 
   SDL_RenderPresent(gs->sdlRenderer);
 

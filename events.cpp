@@ -35,20 +35,30 @@ void handle_events(game_state *gs) {
         break;
       }
       {
-        v2 before = s2w(&gs->camera, gs->mouse.rect.x, gs->mouse.rect.y);
+
+        // v2 target;
+        // target.x = gs->mouse.rect.x;
+        // target.y = gs->mouse.rect.y;
+        f32 s;
         if (e.wheel.y < 0) {
-          gs->camera.scale /= 1.1f;
+          s = gs->camera.scale / 2.0f;
         } else {
-          gs->camera.scale *= 1.1f;
+          s = gs->camera.scale * 2.0f;
         }
-        v2 after = s2w(&gs->camera, gs->mouse.rect.x, gs->mouse.rect.y);
-        v2 diff = after - before;
-        diff.x *= gs->camera.scale;
-        diff.y *= gs->camera.scale;
-        gs->camera.pos = gs->camera.pos + diff;
-        gs->camera.target = gs->camera.target + diff;
-        SDL_Log("before %2.2f,%2.2f after %2.2f, %2.2f diff %2.2f,%2.2f",
-                before.x, before.y, after.x, after.y, diff.x, diff.y);
+        // camera_zoom_to(&gs->camera, target.x, target.y, s);
+        gs->camera.scalecenter.x = gs->mouse.rect.x;
+        gs->camera.scalecenter.y = gs->mouse.rect.y;
+
+        gs->camera.targetscale = s;
+        // v2 before = s2w(&gs->camera, gs->mouse.rect.x, gs->mouse.rect.y);
+        // v2 after = s2w(&gs->camera, gs->mouse.rect.x, gs->mouse.rect.y);
+        // v2 diff = after - before;
+        // diff.x *= gs->camera.scale;
+        // diff.y *= gs->camera.scale;
+        // gs->camera.pos = gs->camera.pos + diff;
+        // gs->camera.target = gs->camera.target + diff;
+        // SDL_Log("before %2.2f,%2.2f after %2.2f, %2.2f diff %2.2f,%2.2f",
+        //         before.x, before.y, after.x, after.y, diff.x, diff.y);
       }
       printf("mouse wheel y:%d\n", e.wheel.y);
       break;
@@ -99,14 +109,15 @@ void handle_events(game_state *gs) {
         break;
       }
       if (e.key.keysym.sym == '[') {
-        gs->camera.scale /= 1.1f;
+        gs->camera.targetscale /= 2.0f;
         break;
       }
       if (e.key.keysym.sym == ']') {
-        gs->camera.scale *= 1.1f;
+        gs->camera.targetscale *= 2.0f;
         break;
       }
       if (e.key.keysym.sym == 'z') {
+        gs->camera.shake += 32.0f;
         break;
       }
       if (e.key.keysym.sym == 'd') {
@@ -114,9 +125,7 @@ void handle_events(game_state *gs) {
       }
       if (e.key.keysym.sym == 'c') {
         printf("re-center/reset requested\n");
-        gs->camera.scale = 1.0f;
-        gs->camera.target.x = 0.0f;
-        gs->camera.target.y = 0.0f;
+        camera_reset(&gs->camera);
         SDL_WarpMouseInWindow(gs->sdlWindow, gs->camera.screenw / 2,
                               gs->camera.screenh / 2);
         break;

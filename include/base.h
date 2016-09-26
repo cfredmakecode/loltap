@@ -3,6 +3,7 @@
 
 #include "vec.cpp"
 #include "stdio.h"
+#include "stdlib.h"
 
 #include <SDL2/SDL.h>
 
@@ -31,9 +32,10 @@ if(!(thing)) {                                                                 \
 }
 
 typedef struct camera_info {
-  v2 pos, target;
+  v2 pos, target, scalecenter;
   f32 screenw, screenh;
   f32 scale, targetscale;
+  f32 shake;
 } camera_info;
 
 typedef struct game_state {
@@ -84,10 +86,6 @@ internal v2 camera_center2w(camera_info *c) {
   return s2w(c, c->screenw / 2, c->screenh / 2);
 }
 
-internal void camera_zoom(camera_info *c, f32 x, f32 y, f32 amount) {
-  camera_zoom_to(c, x, y, amount - c->scale);
-}
-
 internal void camera_zoom_to(camera_info *c, f32 x, f32 y, f32 zoom) {
   c->targetscale = zoom;
   if (c->targetscale < 0.1f) {
@@ -98,12 +96,76 @@ internal void camera_zoom_to(camera_info *c, f32 x, f32 y, f32 zoom) {
   }
   c->target.x = x;
   c->target.y = y;
+  // todo use like zoom center or something like that instead of blowing away
+  // target each time
+  // derp
 }
 
+// internal void camera_zoom(camera_info *c, f32 x, f32 y, f32 amount) {
+//   camera_zoom_to(c, x, y, amount - c->scale);
+// }
+
 internal void camera_step(camera_info *c) {
-  v2 diff = c->target - c->pos;
+  f32 s = c->scale + ((c->targetscale - c->scale) / 4.0f);
+  v2 screentarget;
+  screentarget.x = c->scalecenter.x;
+  screentarget.y = c->scalecenter.y;
+  v2 before = s2w(c, screentarget.x, screentarget.y);
+  c->scale = s;
+  v2 after = s2w(c, screentarget.x, screentarget.y);
+  v2 diff = after - before;
+  diff.x *= c->scale;
+  diff.y *= c->scale;
+  c->pos = c->pos + diff;
+  c->target = c->target + diff;
+
+  // f32 sdiff = c->targetscale - c->scale;
+  // v2 before = s2w(c, c->target.x, c->target.y);
+  // c->scale += sdiff / 10.0f;
+  // v2 after = s2w(c, c->target.x, c->target.y);
+  // diff = after - before;
+  // diff.x *= c->scale;
+  // diff.y *= c->scale;
+  // c->pos = c->pos + diff;
+  // c->target = c->target + diff;
+
+  diff = c->target - c->pos;
   c->pos.x += diff.x / 10.0f;
   c->pos.y += diff.y / 10.0f;
+
+  c->pos.x += ((2 * c->shake) * f32(rand()) / RAND_MAX) - c->shake;
+  c->pos.y += ((2 * c->shake) * f32(rand()) / RAND_MAX) - c->shake;
+  c->shake -= c->shake / 4.0f;
+}
+
+internal void camera_reset(camera_info *c) {
+  SDL_Log("camera: %2.2f,%2.2f target %2.2f,%2.2f scalecenter %2.2f,%2.2f "
+          "screen %2.2fx%2.2f scale %2.2f targetscale %2.2f shake %2.2f",
+          c->pos.x, c->pos.y, c->target.x, c->target.y, c->scalecenter.x,
+          c->scalecenter.y, c->screenw, c->screenh, c->scale, c->targetscale,
+          c->shake);
+  c->target.x = 0;
+  c->target.y = 0;
+  // TODO(caf): to actually move scale to 1.0f correctly, we need to subtract
+  // how much
+  // distance we _will_ add to "zoom" at the current scalecenter back to the
+  // target x/y.
+  // otherwise we "reset" and only sort of get close
+  // stays incorrect until camera_reset'ing again (or just doing it with target
+  // scale of 1.0f fixes it too..)
+  // for now, just ignore smooth zooming to the new point and immediately set
+  // scale to 1.0f, no one will probably care unless we're doing a cinematic
+  // sweep or something.
+  c->scale = 1.0f;
+  c->targetscale = 1.0f;
+  c->scalecenter.x = c->screenw / 2;
+  c->scalecenter.y = c->screenh / 2;
+  c->shake = 0;
+  SDL_Log("camera: %2.2f,%2.2f target %2.2f,%2.2f scalecenter %2.2f,%2.2f "
+          "screen %2.2fx%2.2f scale %2.2f targetscale %2.2f shake %2.2f",
+          c->pos.x, c->pos.y, c->target.x, c->target.y, c->scalecenter.x,
+          c->scalecenter.y, c->screenw, c->screenh, c->scale, c->targetscale,
+          c->shake);
 }
 
 internal void render_rect(game_state *gs, f32 x, f32 y, int w, int h, f32 refx,
@@ -117,7 +179,6 @@ internal void render_rect(game_state *gs, f32 x, f32 y, int w, int h, f32 refx,
   rect.h = h * gs->camera.scale;
   rect.x -= (refx * gs->camera.scale);
   rect.y -= (refy * gs->camera.scale);
-  // SDL_Log("%d, %d  %d, %d", rect.x, rect.y, rect.w, rect.h);
   SDL_SetRenderDrawColor(gs->sdlRenderer, r, g, b, a);
   SDL_RenderFillRect(gs->sdlRenderer, &rect);
 }
@@ -141,50 +202,4 @@ internal void render_image(game_state *gs, SDL_Texture *tex, int srcx, int srcy,
   SDL_RenderCopy(gs->sdlRenderer, tex, &srcrect, &dstrect);
 }
 
-// internal v2 s2w(camera_info *c, f32 x, f32 y) {
-//   v2 result;
-//   v2 pos = {x, y};
-//   v2 view;
-//   v2 viewcenter;
-//   v2 screencenter;
-//
-//   screencenter.x = (c->screenw / 2.0f);
-//   screencenter.y = (c->screenh / 2.0f);
-//   v2 sray = screencenter - pos;
-//
-//   viewcenter.x = (c->rect.w / 2.0f);
-//   viewcenter.y = (c->rect.h / 2.0f);
-//   v2 vrelativepos;
-//   vrelativepos = pos / screencenter;
-//   view = viewcenter + (sray * vrelativepos);
-//
-//   result.x = view.x + c->rect.x;
-//   result.y = view.y + c->rect.y;
-//   return result;
-// }
-//
-// internal v2 w2s(camera_info *c, f32 x, f32 y) {
-//   v2 result;
-//   v2 pos = {x, y};
-//   v2 view;
-//   v2 viewcenter;
-//   v2 screencenter;
-//
-//   screencenter.x = (c->screenw / 2.0f);
-//   screencenter.y = (c->screenh / 2.0f);
-//
-//   viewcenter.x = (c->rect.w / 2.0f);
-//   viewcenter.y = (c->rect.h / 2.0f);
-//
-//   view.x = pos.x - c->rect.x; // - viewcenter.x;
-//   view.y = pos.y - c->rect.y; // - viewcenter.y;
-//   v2 vray = viewcenter - view;
-//
-//   f32 srelativepos;
-//   srelativepos = view.x / viewcenter.x;
-//
-//   result.x = c->rect.x + screencenter.x * srelativepos;
-//   result.y = c->rect.y + screencenter.y * srelativepos;
-//   return result;
-// }
 #endif
