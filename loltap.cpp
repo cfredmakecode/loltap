@@ -83,6 +83,7 @@ void main_loop(game_state *gs) {
 
   /// todo handle having to step multiple ticks because fps got behind
   handle_events(gs);
+  camera_step(&gs->camera);
 
   SDL_RenderSetScale(gs->sdlRenderer, 1.0, 1.0);
   SDL_SetRenderDrawColor(gs->sdlRenderer, 0x00, 0x00, 0x00, 0xff);
@@ -97,8 +98,9 @@ void main_loop(game_state *gs) {
 
   r.w *= gs->camera.scale;
   r.h *= gs->camera.scale;
-
-  SDL_RenderCopy(gs->sdlRenderer, huge_image, 0, &r);
+  render_image(gs, huge_image, 0, 0, 3761, 4833, 0, 0, 3761, 4833, 3761 / 2.0f,
+               4833 / 2.0f);
+  // SDL_RenderCopy(gs->sdlRenderer, huge_image, 0, &r);
 
   r.w = 100;
   r.h = 100;
@@ -109,7 +111,7 @@ void main_loop(game_state *gs) {
   r.x = t.x - (r.w / 2);
   r.y = t.y - (r.h / 2);
   SDL_SetRenderDrawColor(gs->sdlRenderer, 0xff, 0x00, 0x00, 0x44);
-  SDL_RenderFillRect(gs->sdlRenderer, &r);
+  // SDL_RenderFillRect(gs->sdlRenderer, &r);
 
   r.w = 10;
   r.h = 10;
@@ -120,7 +122,10 @@ void main_loop(game_state *gs) {
   r.x = t.x - (r.w / 2);
   r.y = t.y - (r.h / 2);
   SDL_SetRenderDrawColor(gs->sdlRenderer, 0xff, 0x00, 0x00, 0xff);
-  SDL_RenderFillRect(gs->sdlRenderer, &r);
+  // SDL_RenderDrawRect(gs->sdlRenderer, &r);
+
+  t = s2w(&gs->camera, gs->mouse.rect.x, gs->mouse.rect.y);
+  render_rect(gs, t.x, t.y, 10, 10, 5, 5, 0xff, uint8_t(t.x), 0, 0xff);
 
   SDL_RenderPresent(gs->sdlRenderer);
 

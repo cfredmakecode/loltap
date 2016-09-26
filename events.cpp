@@ -46,6 +46,7 @@ void handle_events(game_state *gs) {
         diff.x *= gs->camera.scale;
         diff.y *= gs->camera.scale;
         gs->camera.pos = gs->camera.pos + diff;
+        gs->camera.target = gs->camera.target + diff;
         SDL_Log("before %2.2f,%2.2f after %2.2f, %2.2f diff %2.2f,%2.2f",
                 before.x, before.y, after.x, after.y, diff.x, diff.y);
       }
@@ -55,8 +56,8 @@ void handle_events(game_state *gs) {
       gs->mouse.rect.x = e.motion.x;
       gs->mouse.rect.y = e.motion.y;
       if (gs->mouse.button1) {
-        gs->camera.pos.x += e.motion.xrel;
-        gs->camera.pos.y += e.motion.yrel;
+        gs->camera.target.x += e.motion.xrel;
+        gs->camera.target.y += e.motion.yrel;
       }
       break;
     case SDL_MOUSEBUTTONDOWN:
@@ -114,8 +115,8 @@ void handle_events(game_state *gs) {
       if (e.key.keysym.sym == 'c') {
         printf("re-center/reset requested\n");
         gs->camera.scale = 1.0f;
-        gs->camera.pos.x = 0.0f;
-        gs->camera.pos.y = 0.0f;
+        gs->camera.target.x = 0.0f;
+        gs->camera.target.y = 0.0f;
         SDL_WarpMouseInWindow(gs->sdlWindow, gs->camera.screenw / 2,
                               gs->camera.screenh / 2);
         break;

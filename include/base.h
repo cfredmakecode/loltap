@@ -31,9 +31,9 @@ if(!(thing)) {                                                                 \
 }
 
 typedef struct camera_info {
-  v2 pos;
+  v2 pos, target;
   f32 screenw, screenh;
-  f32 scale;
+  f32 scale, targetscale;
 } camera_info;
 
 typedef struct game_state {
@@ -82,6 +82,63 @@ internal v2 w2s(camera_info *c, f32 x, f32 y) {
 
 internal v2 camera_center2w(camera_info *c) {
   return s2w(c, c->screenw / 2, c->screenh / 2);
+}
+
+internal void camera_zoom(camera_info *c, f32 x, f32 y, f32 amount) {
+  camera_zoom_to(c, x, y, amount - c->scale);
+}
+
+internal void camera_zoom_to(camera_info *c, f32 x, f32 y, f32 zoom) {
+  c->targetscale = zoom;
+  if (c->targetscale < 0.1f) {
+    c->targetscale = 0.1f;
+  }
+  if (c->targetscale > 8.0f) {
+    c->targetscale = 8.0f;
+  }
+  c->target.x = x;
+  c->target.y = y;
+}
+
+internal void camera_step(camera_info *c) {
+  v2 diff = c->target - c->pos;
+  c->pos.x += diff.x / 10.0f;
+  c->pos.y += diff.y / 10.0f;
+}
+
+internal void render_rect(game_state *gs, f32 x, f32 y, int w, int h, f32 refx,
+                          f32 refy, uint8_t r, uint8_t g, uint8_t b,
+                          uint8_t a) {
+  SDL_Rect rect;
+  v2 t = w2s(&gs->camera, x, y);
+  rect.x = t.x;
+  rect.y = t.y;
+  rect.w = w * gs->camera.scale;
+  rect.h = h * gs->camera.scale;
+  rect.x -= (refx * gs->camera.scale);
+  rect.y -= (refy * gs->camera.scale);
+  // SDL_Log("%d, %d  %d, %d", rect.x, rect.y, rect.w, rect.h);
+  SDL_SetRenderDrawColor(gs->sdlRenderer, r, g, b, a);
+  SDL_RenderFillRect(gs->sdlRenderer, &rect);
+}
+
+internal void render_image(game_state *gs, SDL_Texture *tex, int srcx, int srcy,
+                           int srcw, int srch, f32 dstx, f32 dsty, int dstw,
+                           int dsth, f32 refx, f32 refy) {
+  SDL_Rect srcrect, dstrect;
+  srcrect.x = srcx;
+  srcrect.y = srcy;
+  srcrect.w = srcw;
+  srcrect.h = srch;
+
+  v2 t = w2s(&gs->camera, dstx, dsty);
+  dstrect.x = t.x;
+  dstrect.y = t.y;
+  dstrect.w = dstw * gs->camera.scale;
+  dstrect.h = dsth * gs->camera.scale;
+  dstrect.x -= (refx * gs->camera.scale);
+  dstrect.y -= (refy * gs->camera.scale);
+  SDL_RenderCopy(gs->sdlRenderer, tex, &srcrect, &dstrect);
 }
 
 // internal v2 s2w(camera_info *c, f32 x, f32 y) {
