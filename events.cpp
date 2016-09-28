@@ -19,6 +19,12 @@ void handle_events(game_state *gs) {
                 e.window.event);
         break;
       }
+    case SDL_MULTIGESTURE: {
+      SDL_Log("gesture: touchid %llu dTheta %2.2f dDist %2.2f pos %2.2f,%2.2f "
+              "fingers %u",
+              e.mgesture.touchId, e.mgesture.dTheta, e.mgesture.dDist,
+              e.mgesture.x, e.mgesture.y, e.mgesture.numFingers);
+    } break;
     case SDL_MOUSEWHEEL:
       // IMPORTANT(caf): the wheel values aren't based in reality, or pixels or
       // steps or anything

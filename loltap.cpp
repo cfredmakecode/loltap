@@ -31,7 +31,7 @@ extern "C" int main(int argc, char **argv) {
   gs.camera.scale = 1.0f;
   gs.camera.targetscale = 1.0f;
 
-  SDL_Surface *s = SDL_LoadBMP("assets/huge_image.bmp");
+  SDL_Surface *s = SDL_LoadBMP("assets/bg.bmp");
   if (s == 0) {
     SDL_ShowSimpleMessageBox(0, "couldn't load huge_image.bmp!",
                              "couldn't load huge_image.bmp!", gs.sdlWindow);
